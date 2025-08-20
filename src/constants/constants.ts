@@ -1,0 +1,5 @@
+export const WORK_PERMIT_BOT_DATA_SOURCE = 'WORK_PERMIT_BOT_DATA_SOURCE';
+
+export const MODELS = {
+  USERS: 'USERS_MODEL',
+};
