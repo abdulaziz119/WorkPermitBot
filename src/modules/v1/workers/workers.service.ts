@@ -1,4 +1,4 @@
-import { Inject, Injectable } from '@nestjs/common';
+import { Inject, Injectable, NotFoundException } from '@nestjs/common';
 import { Repository } from 'typeorm';
 import { MODELS } from '../../../constants/constants';
 import { WorkerEntity } from '../../../entity/workers.entity';
@@ -18,16 +18,31 @@ export class WorkersService {
     return this.repo.findOne({ where: { id } });
   }
 
-  async createOrGet(telegramId: number, fullname: string) {
+  async createOrGet(
+    telegramId: number,
+    fullname: string,
+    language: 'uz' | 'ru' = 'uz',
+  ) {
     let worker = await this.findByTelegramId(telegramId);
     if (!worker) {
-      worker = this.repo.create({ telegram_id: telegramId, fullname });
+      worker = this.repo.create({
+        telegram_id: telegramId,
+        fullname,
+        language,
+      });
       worker = await this.repo.save(worker);
     } else if (fullname && worker.fullname !== fullname) {
       worker.fullname = fullname;
       await this.repo.save(worker);
     }
     return worker;
+  }
+
+  async setLanguage(telegramId: number, language: 'uz' | 'ru') {
+    const worker = await this.findByTelegramId(telegramId);
+    if (!worker) throw new NotFoundException('Worker not found');
+    worker.language = language;
+    return this.repo.save(worker);
   }
 
   async verifyWorker(workerId: number) {
