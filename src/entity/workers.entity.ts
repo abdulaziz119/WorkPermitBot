@@ -13,6 +13,9 @@ export class WorkerEntity {
   @Column({ type: 'varchar', length: 100 })
   fullname: string;
 
+  @Column({ type: 'boolean', default: false })
+  is_verified: boolean; // manager tasdiqlagandan keyin true bo'ladi
+
   @OneToMany(() => RequestEntity, (request) => request.worker)
   requests: RequestEntity[];
 }
