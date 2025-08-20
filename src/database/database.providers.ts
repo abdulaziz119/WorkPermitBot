@@ -12,6 +12,7 @@ import {
 import { WorkerEntity } from '../entity/workers.entity';
 import { ManagerEntity } from '../entity/managers.entity';
 import { RequestEntity } from '../entity/requests.entity';
+import { AttendanceEntity } from '../entity/attendance.entity';
 
 export const databaseProviders = [
   {
@@ -27,7 +28,12 @@ export const databaseProviders = [
         synchronize: true,
         logging: false,
         schema: DB_SCHEMA,
-        entities: [WorkerEntity, ManagerEntity, RequestEntity],
+        entities: [
+          WorkerEntity,
+          ManagerEntity,
+          RequestEntity,
+          AttendanceEntity,
+        ],
         // extra: {
         //   timezone: 'UTC',
         // },
