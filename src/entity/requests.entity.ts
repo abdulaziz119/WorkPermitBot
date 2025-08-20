@@ -20,7 +20,7 @@ export class RequestEntity extends BaseEntity {
   @Column({
     type: 'enum',
     enum: RequestsStatusEnum,
-    default: RequestsStatusEnum.APPROVED,
+  default: RequestsStatusEnum.PENDING,
   })
   status: RequestsStatusEnum;
 
