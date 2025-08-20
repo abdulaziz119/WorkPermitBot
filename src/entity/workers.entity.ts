@@ -1,12 +1,10 @@
-import { Entity, PrimaryGeneratedColumn, Column, OneToMany } from 'typeorm';
+import { Entity, Column, OneToMany } from 'typeorm';
 import { RequestEntity } from './requests.entity';
 import { DB_SCHEMA } from '../utils/env/env';
+import { BaseEntity } from './base.entity';
 
 @Entity({ schema: DB_SCHEMA, name: 'workers' })
-export class WorkerEntity {
-  @PrimaryGeneratedColumn()
-  id: number;
-
+export class WorkerEntity extends BaseEntity {
   @Column({ type: 'bigint', unique: true })
   telegram_id: number;
 
