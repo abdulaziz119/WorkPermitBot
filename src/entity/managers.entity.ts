@@ -11,6 +11,9 @@ export class ManagerEntity extends BaseEntity {
   @Column({ type: 'varchar', length: 100 })
   fullname: string;
 
+  @Column({ type: 'boolean', default: false })
+  is_active: boolean; // faqat active managerlar ga xabar boradi
+
   @OneToMany(() => RequestEntity, (request) => request.approved_by)
   approved_requests: RequestEntity[];
 }
