@@ -36,9 +36,9 @@ const T = {
     notVerified: 'Siz hali tasdiqlanmagansiz',
     checkInDone: 'Check-in qayd etildi ✅',
     checkOutDone: 'Check-out qayd etildi 🕘',
-  checkInAlready: 'Bugun allaqachon check-in qilingan.',
-  checkOutAlready: 'Bugun allaqachon check-out qilingan.',
-  checkInRequired: 'Avval check-in bosing, soʼng check-out.',
+    checkInAlready: 'Bugun allaqachon check-in qilingan.',
+    checkOutAlready: 'Bugun allaqachon check-out qilingan.',
+    checkInRequired: 'Avval check-in bosing, soʼng check-out.',
     enterDate:
       'Iltimos, ruxsat olinadigan sanani kiriting (format: DD.MM yoki DD-MM). Masalan: 22.08',
     invalidDate:
@@ -104,9 +104,9 @@ const T = {
     notVerified: 'Вы ещё не подтверждены',
     checkInDone: 'Check-in записан ✅',
     checkOutDone: 'Check-out записан 🕘',
-  checkInAlready: 'Сегодня check-in уже выполнен.',
-  checkOutAlready: 'Сегодня check-out уже выполнен.',
-  checkInRequired: 'Сначала выполните check-in, затем check-out.',
+    checkInAlready: 'Сегодня check-in уже выполнен.',
+    checkOutAlready: 'Сегодня check-out уже выполнен.',
+    checkInRequired: 'Сначала выполните check-in, затем check-out.',
     enterDate:
       'Пожалуйста, введите дату отгула (формат: ДД.ММ или ДД-ММ). Например: 22.08',
     invalidDate: 'Неверная дата. Введите в формате ДД.ММ. Например: 05.09',
@@ -150,6 +150,11 @@ const T = {
 export class ScenarioFrontendService implements OnModuleInit {
   private readonly logger = new Logger(ScenarioFrontendService.name);
   private readonly bot: Telegraf<Ctx>;
+  private reminderState = {
+    lastDateKey: '',
+    doneMorning: new Set<number>(), // telegram ids
+    doneEvening: new Set<number>(),
+  };
 
   constructor(
     private readonly workers: WorkersService,
@@ -163,6 +168,7 @@ export class ScenarioFrontendService implements OnModuleInit {
   onModuleInit() {
     this.registerHandlers();
     ensureBotLaunched(this.logger).catch(() => void 0);
+    this.startReminderLoop();
   }
 
   private async getLang(ctx: Ctx): Promise<Lang> {
@@ -371,7 +377,9 @@ export class ScenarioFrontendService implements OnModuleInit {
       } catch (e: any) {
         const code = e?.code || e?.message;
         if (code === 'CHECKIN_ALREADY_DONE')
-          return ctx.answerCbQuery(T[lang].checkInAlready, { show_alert: true });
+          return ctx.answerCbQuery(T[lang].checkInAlready, {
+            show_alert: true,
+          });
         throw e;
       }
       // try clean previous inline keyboard/message
@@ -395,9 +403,13 @@ export class ScenarioFrontendService implements OnModuleInit {
       } catch (e: any) {
         const code = e?.code || e?.message;
         if (code === 'CHECKIN_REQUIRED')
-          return ctx.answerCbQuery(T[lang].checkInRequired, { show_alert: true });
+          return ctx.answerCbQuery(T[lang].checkInRequired, {
+            show_alert: true,
+          });
         if (code === 'CHECKOUT_ALREADY_DONE')
-          return ctx.answerCbQuery(T[lang].checkOutAlready, { show_alert: true });
+          return ctx.answerCbQuery(T[lang].checkOutAlready, {
+            show_alert: true,
+          });
         throw e;
       }
       try {
@@ -559,5 +571,85 @@ export class ScenarioFrontendService implements OnModuleInit {
 
   private async workersListUnverified(limit = 10) {
     return this.workers.listUnverified(limit);
+  }
+
+  // --- Reminders ---
+  private startReminderLoop() {
+    // Tick every 30 seconds
+    setInterval(() => this.reminderTick().catch(() => void 0), 30_000);
+  }
+
+  private dateKey(d = new Date()) {
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+  }
+
+  private async reminderTick() {
+    const now = new Date();
+    const key = this.dateKey(now);
+    if (key !== this.reminderState.lastDateKey) {
+      this.reminderState.lastDateKey = key;
+      this.reminderState.doneMorning.clear();
+      this.reminderState.doneEvening.clear();
+    }
+
+    const hh = now.getHours();
+    const mm = now.getMinutes();
+
+    // 08:40 check-in reminder
+    if (hh === 8 && mm === 40) {
+      await this.sendCheckInReminders();
+    }
+
+    // 17:59 check-out reminder
+    if (hh === 17 && mm === 59) {
+      await this.sendCheckOutReminders();
+    }
+  }
+
+  private async sendCheckInReminders() {
+    try {
+      const workers = await this.workers.listVerified();
+      await Promise.all(
+        workers.map(async (w) => {
+          if (this.reminderState.doneMorning.has(w.telegram_id)) return;
+          const lang: Lang = (w.language as any) || 'uz';
+          const text =
+            lang === 'ru'
+              ? 'Через 10 минут начинается работа. Нажмите Пришёл (Check-in) ✅'
+              : '10 daqiqadan soʼng ish boshlanadi. Kelish (Check-in) ✅ tugmasini bosing.';
+          await this.bot.telegram
+            .sendMessage(w.telegram_id, text)
+            .then(() => this.reminderState.doneMorning.add(w.telegram_id))
+            .catch(() => void 0);
+        }),
+      );
+    } catch (e) {
+      this.logger.warn('sendCheckInReminders failed');
+    }
+  }
+
+  private async sendCheckOutReminders() {
+    try {
+      const workers = await this.workers.listVerified();
+      await Promise.all(
+        workers.map(async (w) => {
+          if (this.reminderState.doneEvening.has(w.telegram_id)) return;
+          const lang: Lang = (w.language as any) || 'uz';
+          const text =
+            lang === 'ru'
+              ? 'Рабочее время завершается. Не забудьте нажать Ушёл (Check-out) 🕘'
+              : 'Ish vaqti tugamoqda. Ketish (Check-out) 🕘 tugmasini bosishni unutmang.';
+          await this.bot.telegram
+            .sendMessage(w.telegram_id, text)
+            .then(() => this.reminderState.doneEvening.add(w.telegram_id))
+            .catch(() => void 0);
+        }),
+      );
+    } catch (e) {
+      this.logger.warn('sendCheckOutReminders failed');
+    }
   }
 }

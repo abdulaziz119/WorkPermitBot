@@ -65,4 +65,11 @@ export class WorkersService {
       take: limit,
     });
   }
+
+  async listVerified(): Promise<WorkerEntity[]> {
+    return this.repo.find({
+      where: { is_verified: true },
+      order: { created_at: 'ASC' },
+    });
+  }
 }
