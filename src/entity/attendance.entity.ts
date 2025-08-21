@@ -4,7 +4,6 @@ import { WorkerEntity } from './workers.entity';
 import { BaseEntity, cascadeUpdateRelationOptions } from './base.entity';
 
 @Entity({ schema: DB_SCHEMA, name: 'attendance' })
-@Unique('uniq_attendance_worker_day', ['worker_id', 'date'])
 export class AttendanceEntity extends BaseEntity {
   @Column({ type: 'integer' })
   worker_id: number;

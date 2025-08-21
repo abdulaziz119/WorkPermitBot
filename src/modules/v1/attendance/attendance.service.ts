@@ -25,7 +25,7 @@ export class AttendanceService {
   async getToday(
     workerId: number,
     today = new Date(),
-  ): Promise<AttendanceEntity> {
+  ): Promise<AttendanceEntity | null> {
     const day: Date = startOfDay(today);
     const yyyy: number = day.getFullYear();
     const mm: string = String(day.getMonth() + 1).padStart(2, '0');
@@ -52,6 +52,12 @@ export class AttendanceService {
       });
     } else if (!today.check_in) {
       today.check_in = now;
+    } else {
+      // Already checked in today
+      const err = new Error('CHECKIN_ALREADY_DONE');
+      // @ts-ignore custom code for callers
+      (err as any).code = 'CHECKIN_ALREADY_DONE';
+      throw err;
     }
     return this.repo.save(today);
   }
@@ -59,18 +65,19 @@ export class AttendanceService {
   async checkOut(workerId: number): Promise<AttendanceEntity> {
     const now = new Date();
     let today: AttendanceEntity | null = await this.getToday(workerId, now);
-    if (!today) {
-      const yyyy: number = now.getFullYear();
-      const mm: string = String(now.getMonth() + 1).padStart(2, '0');
-      const dd: string = String(now.getDate()).padStart(2, '0');
-      today = this.repo.create({
-        worker_id: workerId,
-        date: `${yyyy}-${mm}-${dd}`,
-        check_out: now,
-      });
-    } else {
-      today.check_out = now;
+    if (!today || !today.check_in) {
+      const err = new Error('CHECKIN_REQUIRED');
+      // @ts-ignore
+      (err as any).code = 'CHECKIN_REQUIRED';
+      throw err;
     }
+    if (today.check_out) {
+      const err = new Error('CHECKOUT_ALREADY_DONE');
+      // @ts-ignore
+      (err as any).code = 'CHECKOUT_ALREADY_DONE';
+      throw err;
+    }
+    today.check_out = now;
     return this.repo.save(today);
   }
 

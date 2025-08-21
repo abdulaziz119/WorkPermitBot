@@ -36,6 +36,9 @@ const T = {
     notVerified: 'Siz hali tasdiqlanmagansiz',
     checkInDone: 'Check-in qayd etildi ✅',
     checkOutDone: 'Check-out qayd etildi 🕘',
+  checkInAlready: 'Bugun allaqachon check-in qilingan.',
+  checkOutAlready: 'Bugun allaqachon check-out qilingan.',
+  checkInRequired: 'Avval check-in bosing, soʼng check-out.',
     enterDate:
       'Iltimos, ruxsat olinadigan sanani kiriting (format: DD.MM yoki DD-MM). Masalan: 22.08',
     invalidDate:
@@ -101,6 +104,9 @@ const T = {
     notVerified: 'Вы ещё не подтверждены',
     checkInDone: 'Check-in записан ✅',
     checkOutDone: 'Check-out записан 🕘',
+  checkInAlready: 'Сегодня check-in уже выполнен.',
+  checkOutAlready: 'Сегодня check-out уже выполнен.',
+  checkInRequired: 'Сначала выполните check-in, затем check-out.',
     enterDate:
       'Пожалуйста, введите дату отгула (формат: ДД.ММ или ДД-ММ). Например: 22.08',
     invalidDate: 'Неверная дата. Введите в формате ДД.ММ. Например: 05.09',
@@ -360,7 +366,14 @@ export class ScenarioFrontendService implements OnModuleInit {
       const worker = await this.workers.findByTelegramId(tg.id);
       if (!worker || !worker.is_verified)
         return ctx.answerCbQuery(T[lang].notVerified);
-      await this.attendance.checkIn(worker.id);
+      try {
+        await this.attendance.checkIn(worker.id);
+      } catch (e: any) {
+        const code = e?.code || e?.message;
+        if (code === 'CHECKIN_ALREADY_DONE')
+          return ctx.answerCbQuery(T[lang].checkInAlready, { show_alert: true });
+        throw e;
+      }
       // try clean previous inline keyboard/message
       try {
         await ctx.editMessageReplyMarkup(undefined);
@@ -377,7 +390,16 @@ export class ScenarioFrontendService implements OnModuleInit {
       const worker = await this.workers.findByTelegramId(tg.id);
       if (!worker || !worker.is_verified)
         return ctx.answerCbQuery(T[lang].notVerified);
-      await this.attendance.checkOut(worker.id);
+      try {
+        await this.attendance.checkOut(worker.id);
+      } catch (e: any) {
+        const code = e?.code || e?.message;
+        if (code === 'CHECKIN_REQUIRED')
+          return ctx.answerCbQuery(T[lang].checkInRequired, { show_alert: true });
+        if (code === 'CHECKOUT_ALREADY_DONE')
+          return ctx.answerCbQuery(T[lang].checkOutAlready, { show_alert: true });
+        throw e;
+      }
       try {
         await ctx.editMessageReplyMarkup(undefined);
       } catch {}
