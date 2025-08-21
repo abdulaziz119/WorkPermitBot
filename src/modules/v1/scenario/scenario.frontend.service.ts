@@ -92,7 +92,8 @@ const T = {
     roleManager: '👨‍💼 Менеджер',
     workerCreated:
       'Профиль работника создан. Ожидайте подтверждения менеджера.',
-    managerCreated: 'Профиль менеджера создан. Ожидается подтверждение супер админа.',
+    managerCreated:
+      'Профиль менеджера создан. Ожидается подтверждение супер админа.',
     saved: 'Сохранено ✅',
     enterFullname: 'Пожалуйста, введите ваше полное имя:',
     invalidFullname: 'Слишком короткое имя. Введите полное имя.',
@@ -256,7 +257,7 @@ export class ScenarioFrontendService implements OnModuleInit {
     if (!manager.is_active) {
       await ctx.reply(
         T[lang].greetingManagerPending(manager.fullname),
-        this.mainMenu(false, lang) // Show waiting buttons
+        this.mainMenu(false, lang), // Show waiting buttons
       );
       return;
     }
@@ -270,7 +271,7 @@ export class ScenarioFrontendService implements OnModuleInit {
       Markup.button.callback(tr.managerPendingBtn, 'mgr_pending'),
     ]);
 
-    // Unverified workers  
+    // Unverified workers
     menuButtons.push([
       Markup.button.callback(tr.managerUnverifiedBtn, 'mgr_workers_pending'),
     ]);
@@ -279,8 +280,10 @@ export class ScenarioFrontendService implements OnModuleInit {
     if (isSuperAdmin) {
       menuButtons.push([
         Markup.button.callback(
-          lang === 'ru' ? 'Неподтверждённые менеджеры 👨‍💼' : 'Tasdiqlanmagan managerlar 👨‍💼',
-          'mgr_managers_pending'
+          lang === 'ru'
+            ? 'Неподтверждённые менеджеры 👨‍💼'
+            : 'Tasdiqlanmagan managerlar 👨‍💼',
+          'mgr_managers_pending',
         ),
       ]);
     }
@@ -290,9 +293,13 @@ export class ScenarioFrontendService implements OnModuleInit {
       Markup.button.callback(tr.viewWorkersBtn, 'mgr_view_workers'),
     ]);
 
-    const title = isSuperAdmin 
-      ? (lang === 'ru' ? 'Меню супер админа:' : 'Super Admin menyusi:')
-      : (lang === 'ru' ? 'Меню менеджера:' : 'Manager menyusi:');
+    const title = isSuperAdmin
+      ? lang === 'ru'
+        ? 'Меню супер админа:'
+        : 'Super Admin menyusi:'
+      : lang === 'ru'
+        ? 'Меню менеджера:'
+        : 'Manager menyusi:';
     await ctx.reply(title, Markup.inlineKeyboard(menuButtons));
   }
 
@@ -501,7 +508,11 @@ export class ScenarioFrontendService implements OnModuleInit {
             this.mainMenu(worker.is_verified, lang),
           );
         } else {
-          const manager = await this.managers.createIfNotExists(tgId, name, lang);
+          const manager = await this.managers.createIfNotExists(
+            tgId,
+            name,
+            lang,
+          );
           await ctx.reply(T[lang].managerCreated);
           // Notify super admins about new manager
           await this.notifySuperAdminsNewManager({
@@ -697,9 +708,11 @@ export class ScenarioFrontendService implements OnModuleInit {
     }
   }
 
-  private async notifySuperAdminsNewManager(
-    manager: { telegram_id: number; fullname: string; language: 'uz' | 'ru' },
-  ) {
+  private async notifySuperAdminsNewManager(manager: {
+    telegram_id: number;
+    fullname: string;
+    language: 'uz' | 'ru';
+  }) {
     try {
       const superAdmins = await this.managers.listSuperAdmins();
       await Promise.all(

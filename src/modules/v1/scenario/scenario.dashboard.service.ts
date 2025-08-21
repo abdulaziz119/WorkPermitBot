@@ -213,10 +213,13 @@ export class ScenarioDashboardService implements OnModuleInit {
         await ctx.editMessageReplyMarkup(undefined);
       } catch {}
       const pending = await this.requests.listPending();
-      if (!pending.length) 
-        return ctx.editMessageText(T[lang].pendingEmpty, this.backToMenuKeyboard(lang));
-      
-      let message = `${T[lang].managerPendingBtn}:\n\n`;
+      if (!pending.length)
+        return ctx.editMessageText(
+          T[lang].pendingEmpty,
+          this.backToMenuKeyboard(lang),
+        );
+
+      const message = `${T[lang].managerPendingBtn}:\n\n`;
       for (const r of pending.slice(0, 10)) {
         await ctx.reply(
           `#${r.id} • Worker:${r.worker_id} • ${r.reason}`,
@@ -228,12 +231,9 @@ export class ScenarioDashboardService implements OnModuleInit {
           ]),
         );
       }
-      
+
       // Send back button after the list
-      await ctx.reply(
-        T[lang].managerPendingBtn,
-        this.backToMenuKeyboard(lang)
-      );
+      await ctx.reply(T[lang].managerPendingBtn, this.backToMenuKeyboard(lang));
     });
 
     // Approve / Reject capture
@@ -286,9 +286,12 @@ export class ScenarioDashboardService implements OnModuleInit {
       } catch {}
       const list = await this.workers.listUnverified(10);
       if (!list.length)
-        return ctx.editMessageText(T[lang].unverifiedWorkersEmpty, this.backToMenuKeyboard(lang));
-      
-      let message = `${T[lang].managerUnverifiedBtn}:\n\n`;
+        return ctx.editMessageText(
+          T[lang].unverifiedWorkersEmpty,
+          this.backToMenuKeyboard(lang),
+        );
+
+      const message = `${T[lang].managerUnverifiedBtn}:\n\n`;
       for (const w of list) {
         await ctx.reply(
           `Ishchi: ${w.fullname} (tg:${w.telegram_id})`,
@@ -302,11 +305,11 @@ export class ScenarioDashboardService implements OnModuleInit {
           ]),
         );
       }
-      
+
       // Send back button after the list
       await ctx.reply(
         T[lang].managerUnverifiedBtn,
-        this.backToMenuKeyboard(lang)
+        this.backToMenuKeyboard(lang),
       );
     });
 
@@ -488,10 +491,13 @@ export class ScenarioDashboardService implements OnModuleInit {
       const result = await this.workers.listVerifiedPaginated(page, 5);
 
       if (result.workers.length === 0) {
-        return ctx.editMessageText(T[lang].verifiedWorkersEmpty, this.backToMenuKeyboard(lang));
+        return ctx.editMessageText(
+          T[lang].verifiedWorkersEmpty,
+          this.backToMenuKeyboard(lang),
+        );
       }
 
-      let message = `${T[lang].viewWorkersBtn} (${page}/${Math.ceil(result.total / 5)}):\n`;
+      const message = `${T[lang].viewWorkersBtn} (${page}/${Math.ceil(result.total / 5)}):\n`;
 
       const buttons: any[] = [];
 
@@ -501,11 +507,11 @@ export class ScenarioDashboardService implements OnModuleInit {
         const status = todayAttendance?.check_in
           ? T[lang].attendancePresent
           : T[lang].attendanceAbsent;
-        
+
         buttons.push([
           Markup.button.callback(
             `${status} ${worker.fullname}`,
-            `mgr_worker_${worker.id}`
+            `mgr_worker_${worker.id}`,
           ),
         ]);
       }
@@ -565,16 +571,26 @@ export class ScenarioDashboardService implements OnModuleInit {
 
       const buttons = [
         [
-          Markup.button.callback(T[lang].exportDaily, `mgr_export_worker_day_${workerId}`),
-          Markup.button.callback(T[lang].exportWeekly, `mgr_export_worker_week_${workerId}`),
+          Markup.button.callback(
+            T[lang].exportDaily,
+            `mgr_export_worker_day_${workerId}`,
+          ),
+          Markup.button.callback(
+            T[lang].exportWeekly,
+            `mgr_export_worker_week_${workerId}`,
+          ),
         ],
         [
-          Markup.button.callback(T[lang].exportMonthly, `mgr_export_worker_month_${workerId}`),
-          Markup.button.callback(T[lang].exportYearly, `mgr_export_worker_year_${workerId}`),
+          Markup.button.callback(
+            T[lang].exportMonthly,
+            `mgr_export_worker_month_${workerId}`,
+          ),
+          Markup.button.callback(
+            T[lang].exportYearly,
+            `mgr_export_worker_year_${workerId}`,
+          ),
         ],
-        [
-          Markup.button.callback(T[lang].backBtn, 'mgr_view_workers'),
-        ],
+        [Markup.button.callback(T[lang].backBtn, 'mgr_view_workers')],
       ];
 
       try {
@@ -604,7 +620,10 @@ export class ScenarioDashboardService implements OnModuleInit {
         );
 
         // Get leave requests for the period
-        const requests = await this.requests.getRequestsByPeriod(workerIds, period);
+        const requests = await this.requests.getRequestsByPeriod(
+          workerIds,
+          period,
+        );
 
         // Group attendances and requests by worker
         const data = workers.map((worker) => ({
@@ -627,48 +646,56 @@ export class ScenarioDashboardService implements OnModuleInit {
     });
 
     // Individual worker export handlers
-    bot.action(/^mgr_export_worker_(day|week|month|year)_(\d+)$/, async (ctx) => {
-      const period = ctx.match[1] as 'day' | 'week' | 'month' | 'year';
-      const workerId = Number(ctx.match[2]);
-      const tg = ctx.from;
-      const lang = await this.getLang(ctx);
-      const manager = await this.managers.findByTelegramId(tg.id);
-      if (!manager || !manager.is_active)
-        return ctx.answerCbQuery(T[lang].noPermission);
+    bot.action(
+      /^mgr_export_worker_(day|week|month|year)_(\d+)$/,
+      async (ctx) => {
+        const period = ctx.match[1] as 'day' | 'week' | 'month' | 'year';
+        const workerId = Number(ctx.match[2]);
+        const tg = ctx.from;
+        const lang = await this.getLang(ctx);
+        const manager = await this.managers.findByTelegramId(tg.id);
+        if (!manager || !manager.is_active)
+          return ctx.answerCbQuery(T[lang].noPermission);
 
-      try {
-        await ctx.answerCbQuery('📊 Excel fayl tayyorlanmoqda...');
+        try {
+          await ctx.answerCbQuery('📊 Excel fayl tayyorlanmoqda...');
 
-        const worker = await this.workers.findById(workerId);
-        if (!worker) return ctx.answerCbQuery(T[lang].notFound);
+          const worker = await this.workers.findById(workerId);
+          if (!worker) return ctx.answerCbQuery(T[lang].notFound);
 
-        const attendances = await this.attendance.getAttendanceByPeriod(
-          [workerId],
-          period,
-        );
+          const attendances = await this.attendance.getAttendanceByPeriod(
+            [workerId],
+            period,
+          );
 
-        // Get leave requests for this worker and period
-        const requests = await this.requests.getRequestsByPeriod([workerId], period);
+          // Get leave requests for this worker and period
+          const requests = await this.requests.getRequestsByPeriod(
+            [workerId],
+            period,
+          );
 
-        // Data for single worker
-        const data = [{
-          worker,
-          attendances: attendances.filter((a) => a.worker_id === workerId),
-          requests: requests.filter((r) => r.worker_id === workerId),
-        }];
+          // Data for single worker
+          const data = [
+            {
+              worker,
+              attendances: attendances.filter((a) => a.worker_id === workerId),
+              requests: requests.filter((r) => r.worker_id === workerId),
+            },
+          ];
 
-        const buffer = this.excel.generateExcelBuffer(data, period);
-        const fileName = this.excel.getFileName(period, worker.fullname);
+          const buffer = this.excel.generateExcelBuffer(data, period);
+          const fileName = this.excel.getFileName(period, worker.fullname);
 
-        await ctx.replyWithDocument({
-          source: buffer,
-          filename: fileName,
-        });
-      } catch (e) {
-        this.logger.error('Individual worker export failed', e);
-        await ctx.answerCbQuery('❌ Xatolik yuz berdi', { show_alert: true });
-      }
-    });
+          await ctx.replyWithDocument({
+            source: buffer,
+            filename: fileName,
+          });
+        } catch (e) {
+          this.logger.error('Individual worker export failed', e);
+          await ctx.answerCbQuery('❌ Xatolik yuz berdi', { show_alert: true });
+        }
+      },
+    );
 
     // Unverified managers (Super Admin only)
     bot.action('mgr_managers_pending', async (ctx) => {

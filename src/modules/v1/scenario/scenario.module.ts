@@ -17,6 +17,10 @@ import { WorkersExcelService } from '../../../utils/workers.excel';
     AttendanceModule,
   ],
   controllers: [],
-  providers: [ScenarioFrontendService, ScenarioDashboardService, WorkersExcelService],
+  providers: [
+    ScenarioFrontendService,
+    ScenarioDashboardService,
+    WorkersExcelService,
+  ],
 })
 export class ScenarioModule {}
