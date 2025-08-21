@@ -21,6 +21,8 @@ const T = {
     managerCreated:
       'Menejer profili yaratildi. /activate buyrugʻi bilan faollashtiring.',
     saved: 'Saqlandi ✅',
+    enterFullname: 'Iltimos, toʼliq ismingizni kiriting:',
+    invalidFullname: 'Ism juda qisqa. Iltimos, toʼliq ismingizni kiriting.',
     greetingVerified: (name: string) => `Salom, ${name}. Asosiy menyu:`,
     greetingPending: (name: string) =>
       `Salom, ${name}. Roʼyxatdan oʼtish uchun menejer tasdiqlashi kerak.`,
@@ -89,6 +91,8 @@ const T = {
       'Профиль работника создан. Ожидайте подтверждения менеджера.',
     managerCreated: 'Профиль менеджера создан. Активируйте через /activate.',
     saved: 'Сохранено ✅',
+    enterFullname: 'Пожалуйста, введите ваше полное имя:',
+    invalidFullname: 'Слишком короткое имя. Введите полное имя.',
     greetingVerified: (name: string) => `Здравствуйте, ${name}. Главное меню:`,
     greetingPending: (name: string) =>
       `Здравствуйте, ${name}. Для завершения регистрации менеджер должен подтвердить вас.`,
@@ -314,13 +318,12 @@ export class ScenarioFrontendService implements OnModuleInit {
       ctx.session.step = 'choose_role';
     });
 
-    // Role selection
+    // Role selection (ask user to enter fullname next)
     bot.action(['role_worker', 'role_manager'], async (ctx) => {
       ctx.session ??= {};
       const lang: Lang = ctx.session.lang || 'uz';
       const tr = T[lang];
       const tgId = Number(ctx.from?.id);
-      const fullname = ctx.session.fullname || 'User';
       const isWorker = ctx.match[0] === 'role_worker';
 
       if (isWorker) {
@@ -330,20 +333,8 @@ export class ScenarioFrontendService implements OnModuleInit {
           await ctx.editMessageText(tr.saved);
           return;
         }
-        const worker = await this.workers.createOrGet(tgId, fullname, lang);
-        await ctx.editMessageText(tr.workerCreated);
-        if (!worker.is_verified) {
-          await this.notifyManagersByLang(
-            T.uz.newWorkerNotify(worker.fullname, tgId),
-            T.ru.newWorkerNotify(worker.fullname, tgId),
-          );
-        }
-        await ctx.reply(
-          worker.is_verified
-            ? T[lang].greetingVerified(worker.fullname)
-            : T[lang].greetingPending(worker.fullname),
-          this.mainMenu(worker.is_verified, lang),
-        );
+        ctx.session.pending_role = 'worker';
+        await ctx.editMessageText(tr.enterFullname);
       } else {
         // Prevent dual creation: if already worker, do not create manager
         const worker = await this.workers.findByTelegramId(tgId);
@@ -351,12 +342,11 @@ export class ScenarioFrontendService implements OnModuleInit {
           await ctx.editMessageText(tr.saved);
           return;
         }
-        await this.managers.createIfNotExists(tgId, fullname, lang);
-        await ctx.editMessageText(tr.managerCreated);
-        await ctx.reply(T[lang].managerMenuHint);
+        ctx.session.pending_role = 'manager';
+        await ctx.editMessageText(tr.enterFullname);
       }
 
-      ctx.session.step = undefined;
+      ctx.session.step = 'await_fullname';
     });
 
     // No-op button
@@ -434,6 +424,40 @@ export class ScenarioFrontendService implements OnModuleInit {
     });
 
     bot.on('text', async (ctx, next) => {
+      // Step: collect fullname after role selection
+      if (ctx.session?.step === 'await_fullname' && ctx.session?.pending_role) {
+        const lang = await this.getLang(ctx);
+        const name = (ctx.message.text || '').trim();
+        if (name.length < 3) {
+          await ctx.reply(T[lang].invalidFullname);
+          return; // keep waiting for proper fullname
+        }
+        const tgId = Number(ctx.from?.id);
+        const role = ctx.session.pending_role as 'worker' | 'manager';
+        if (role === 'worker') {
+          const worker = await this.workers.createOrGet(tgId, name, lang);
+          await ctx.reply(T[lang].workerCreated);
+          if (!worker.is_verified) {
+            await this.notifyManagersByLang(
+              T.uz.newWorkerNotify(worker.fullname, tgId),
+              T.ru.newWorkerNotify(worker.fullname, tgId),
+            );
+          }
+          await ctx.reply(
+            worker.is_verified
+              ? T[lang].greetingVerified(worker.fullname)
+              : T[lang].greetingPending(worker.fullname),
+            this.mainMenu(worker.is_verified, lang),
+          );
+        } else {
+          await this.managers.createIfNotExists(tgId, name, lang);
+          await ctx.reply(T[lang].managerCreated);
+          await ctx.reply(T[lang].managerMenuHint);
+        }
+        ctx.session.step = undefined;
+        ctx.session.pending_role = undefined;
+        return; // stop here
+      }
       // New flow: ask date then reason
       const flow = ctx.session?.['req_flow'];
       if (flow?.step === 'await_date') {
@@ -534,6 +558,8 @@ export class ScenarioFrontendService implements OnModuleInit {
       if (ctx.session) {
         ctx.session['req_flow'] = undefined;
         ctx.session['awaiting_reason'] = false;
+        ctx.session['step'] = undefined;
+        ctx.session['pending_role'] = undefined;
       }
       const worker = await this.workers.findByTelegramId(tgId);
       const isVerified = !!worker?.is_verified;
@@ -567,10 +593,6 @@ export class ScenarioFrontendService implements OnModuleInit {
     } catch (e: any) {
       this.logger.error('notifyManagersByLang error', e?.message || e);
     }
-  }
-
-  private async workersListUnverified(limit = 10) {
-    return this.workers.listUnverified(limit);
   }
 
   // --- Reminders ---
