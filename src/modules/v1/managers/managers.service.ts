@@ -31,14 +31,14 @@ export class ManagersService {
   }
 
   async setLanguage(telegram_id: number, language: 'uz' | 'ru') {
-    const manager = await this.findByTelegramId(telegram_id);
+    const manager: ManagerEntity = await this.findByTelegramId(telegram_id);
     if (!manager) throw new NotFoundException('Manager not found');
     manager.language = language;
     return this.managerRepo.save(manager);
   }
 
   async setActive(telegram_id: number, active: boolean) {
-    const manager = await this.findByTelegramId(telegram_id);
+    const manager: ManagerEntity = await this.findByTelegramId(telegram_id);
     if (!manager) throw new NotFoundException('Manager not found');
     manager.is_active = active;
     return this.managerRepo.save(manager);
@@ -49,7 +49,7 @@ export class ManagersService {
   }
 
   async createOrGet(telegramId: number, fullname: string) {
-    let manager = await this.findByTelegramId(telegramId);
+    let manager: ManagerEntity = await this.findByTelegramId(telegramId);
     if (!manager) {
       manager = this.managerRepo.create({
         telegram_id: telegramId,
@@ -65,7 +65,7 @@ export class ManagersService {
   }
 
   async activate(telegramId: number) {
-    const manager = await this.findByTelegramId(telegramId);
+    const manager: ManagerEntity = await this.findByTelegramId(telegramId);
     if (!manager) return null;
     if (!manager.is_active) {
       manager.is_active = true;
@@ -79,7 +79,7 @@ export class ManagersService {
   }
 
   async deactivate(telegramId: number) {
-    const manager = await this.findByTelegramId(telegramId);
+    const manager: ManagerEntity = await this.findByTelegramId(telegramId);
     if (!manager) return null;
     if (manager.is_active) {
       manager.is_active = false;

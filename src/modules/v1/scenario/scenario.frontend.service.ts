@@ -5,7 +5,6 @@ import { WorkersService } from '../workers/workers.service';
 import { ManagersService } from '../managers/managers.service';
 import { RequestsService } from '../requests/requests.service';
 import { AttendanceService } from '../attendance/attendance.service';
-import { RequestsStatusEnum } from '../../../utils/enum/requests.enum';
 
 type Ctx = Context & { session?: Record<string, any> };
 
@@ -61,10 +60,11 @@ const T = {
     newWorkerNotify: (name: string, tgId: number) =>
       `Yangi ishchi: ${name} (tg:${tgId}). Tasdiqlash kerak.`,
     managerMenuHint: 'Manager menyusi uchun /manager buyrugʼidan foydalaning.',
-  managerPendingBtn: 'Kutilayotgan soʼrovlar 🔔',
-  managerUnverifiedBtn: 'Tasdiqlanmagan ishchilar 👤',
-  notFound: 'Topilmadi',
-  commentLabel: 'Izoh',
+    managerPendingBtn: 'Kutilayotgan soʼrovlar 🔔',
+    managerUnverifiedBtn: 'Tasdiqlanmagan ishchilar 👤',
+    notFound: 'Topilmadi',
+    commentLabel: 'Izoh',
+    approvedByManager: 'Profilingiz menejer tomonidan tasdiqlandi ✅',
   },
   ru: {
     chooseLang: 'Выберите язык:',
@@ -115,16 +115,17 @@ const T = {
     newWorkerNotify: (name: string, tgId: number) =>
       `Новый работник: ${name} (tg:${tgId}). Требуется подтверждение.`,
     managerMenuHint: 'Для меню менеджера используйте команду /manager.',
-  managerPendingBtn: 'Ожидающие запросы 🔔',
-  managerUnverifiedBtn: 'Неподтверждённые работники 👤',
-  notFound: 'Не найдено',
-  commentLabel: 'Комментарий',
+    managerPendingBtn: 'Ожидающие запросы 🔔',
+    managerUnverifiedBtn: 'Неподтверждённые работники 👤',
+    notFound: 'Не найдено',
+    commentLabel: 'Комментарий',
+    approvedByManager: 'Ваш профиль подтверждён менеджером ✅',
   },
 } as const;
 
 @Injectable()
-export class ScenarioService implements OnModuleInit {
-  private readonly logger = new Logger(ScenarioService.name);
+export class ScenarioFrontendService implements OnModuleInit {
+  private readonly logger = new Logger(ScenarioFrontendService.name);
   private readonly bot: Telegraf<Ctx>;
 
   constructor(
@@ -182,8 +183,8 @@ export class ScenarioService implements OnModuleInit {
   private managerMenu(lang: Lang) {
     const tr = T[lang];
     return Markup.inlineKeyboard([
-  [Markup.button.callback(tr.managerPendingBtn, 'mgr_pending')],
-  [Markup.button.callback(tr.managerUnverifiedBtn, 'mgr_workers_pending')],
+      [Markup.button.callback(tr.managerPendingBtn, 'mgr_pending')],
+      [Markup.button.callback(tr.managerUnverifiedBtn, 'mgr_workers_pending')],
     ]);
   }
 
@@ -200,7 +201,27 @@ export class ScenarioService implements OnModuleInit {
       ctx.session.fullname = full;
       ctx.session.tgId = tg.id;
 
-      // Ask language first
+      // If user already exists, skip language/role prompt
+      const existingWorker = await this.workers.findByTelegramId(tg.id);
+      const existingManager = await this.managers.findByTelegramId(tg.id);
+      if (existingWorker || existingManager) {
+        const lang = await this.getLang(ctx);
+        ctx.session.lang = lang;
+        if (existingWorker) {
+          const tr = T[lang];
+          await ctx.reply(
+            existingWorker.is_verified
+              ? tr.greetingVerified(existingWorker.fullname)
+              : tr.greetingPending(existingWorker.fullname),
+            this.mainMenu(!!existingWorker.is_verified, lang),
+          );
+        } else {
+          await ctx.reply(T[lang].managerMenuHint);
+        }
+        return;
+      }
+
+      // Ask language (first time)
       const kb = Markup.inlineKeyboard([
         [
           Markup.button.callback(T.uz.langUz, 'lang_uz'),
@@ -353,7 +374,7 @@ export class ScenarioService implements OnModuleInit {
       const tg = ctx.from;
       const worker = await this.workers.findByTelegramId(tg.id);
       const lang = await this.getLang(ctx);
-  if (!worker) return ctx.answerCbQuery(T[lang].notFound);
+      if (!worker) return ctx.answerCbQuery(T[lang].notFound);
       const list = await this.requests.listByWorker(worker.id);
       if (!list.length) return ctx.editMessageText(T[lang].noRequests);
       const lines = list
@@ -484,8 +505,21 @@ export class ScenarioService implements OnModuleInit {
       if (!manager || !manager.is_active)
         return ctx.answerCbQuery(T[lang].noPermission);
       const verified = await this.workers.verifyWorker(id);
-      if (!verified) return ctx.answerCbQuery('Topilmadi');
+      if (!verified) return ctx.answerCbQuery(T[lang].notFound);
       await ctx.reply(T[lang].workerVerifiedMsg(verified.fullname));
+      // Notify worker about approval in their own language and show menu
+      try {
+        const wLang = (verified.language as Lang) || 'uz';
+        await this.bot.telegram.sendMessage(
+          verified.telegram_id,
+          T[wLang].approvedByManager,
+          { reply_markup: this.mainMenu(true, wLang).reply_markup as any },
+        );
+      } catch (e) {
+        this.logger.warn(
+          `Could not notify verified worker ${verified.id}: ${String(e)}`,
+        );
+      }
     });
   }
 

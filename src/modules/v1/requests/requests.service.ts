@@ -45,7 +45,9 @@ export class RequestsService {
   }
 
   async reject(requestId: number, managerId: number, comment?: string) {
-    const entity = await this.repo.findOne({ where: { id: requestId } });
+    const entity: RequestEntity = await this.repo.findOne({
+      where: { id: requestId },
+    });
     if (!entity) return null;
     entity.status = RequestsStatusEnum.REJECTED;
     entity.manager_id = managerId;

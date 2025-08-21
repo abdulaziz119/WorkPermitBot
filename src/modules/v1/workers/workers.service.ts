@@ -23,7 +23,7 @@ export class WorkersService {
     fullname: string,
     language: 'uz' | 'ru' = 'uz',
   ) {
-    let worker = await this.findByTelegramId(telegramId);
+    let worker: WorkerEntity = await this.findByTelegramId(telegramId);
     if (!worker) {
       worker = this.repo.create({
         telegram_id: telegramId,
@@ -39,14 +39,14 @@ export class WorkersService {
   }
 
   async setLanguage(telegramId: number, language: 'uz' | 'ru') {
-    const worker = await this.findByTelegramId(telegramId);
+    const worker: WorkerEntity = await this.findByTelegramId(telegramId);
     if (!worker) throw new NotFoundException('Worker not found');
     worker.language = language;
     return this.repo.save(worker);
   }
 
   async verifyWorker(workerId: number) {
-    const worker = await this.findById(workerId);
+    const worker: WorkerEntity = await this.findById(workerId);
     if (!worker) return null;
     if (!worker.is_verified) {
       worker.is_verified = true;

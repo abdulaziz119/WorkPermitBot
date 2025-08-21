@@ -23,8 +23,8 @@ export class AttendanceService {
   ) {}
 
   async getToday(workerId: number, today = new Date()) {
-    const from = startOfDay(today);
-    const to = endOfDay(today);
+    const from: Date = startOfDay(today);
+    const to: Date = endOfDay(today);
     return this.repo
       .createQueryBuilder('a')
       .where('a.worker_id = :workerId', { workerId })
@@ -34,7 +34,7 @@ export class AttendanceService {
   }
 
   async checkIn(workerId: number) {
-    let today = await this.getToday(workerId);
+    let today: AttendanceEntity = await this.getToday(workerId);
     if (!today) {
       today = this.repo.create({ worker_id: workerId, check_in: new Date() });
     }
@@ -43,7 +43,7 @@ export class AttendanceService {
   }
 
   async checkOut(workerId: number) {
-    let today = await this.getToday(workerId);
+    let today: AttendanceEntity = await this.getToday(workerId);
     if (!today) {
       today = this.repo.create({ worker_id: workerId });
     }
