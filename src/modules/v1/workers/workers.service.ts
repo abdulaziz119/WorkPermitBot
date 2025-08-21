@@ -10,11 +10,11 @@ export class WorkersService {
     private readonly repo: Repository<WorkerEntity>,
   ) {}
 
-  async findByTelegramId(telegramId: number) {
+  async findByTelegramId(telegramId: number): Promise<WorkerEntity> {
     return this.repo.findOne({ where: { telegram_id: telegramId } });
   }
 
-  async findById(id: number) {
+  async findById(id: number): Promise<WorkerEntity> {
     return this.repo.findOne({ where: { id } });
   }
 
@@ -22,7 +22,7 @@ export class WorkersService {
     telegramId: number,
     fullname: string,
     language: 'uz' | 'ru' = 'uz',
-  ) {
+  ): Promise<WorkerEntity> {
     let worker: WorkerEntity = await this.findByTelegramId(telegramId);
     if (!worker) {
       worker = this.repo.create({
@@ -38,14 +38,17 @@ export class WorkersService {
     return worker;
   }
 
-  async setLanguage(telegramId: number, language: 'uz' | 'ru') {
+  async setLanguage(
+    telegramId: number,
+    language: 'uz' | 'ru',
+  ): Promise<WorkerEntity> {
     const worker: WorkerEntity = await this.findByTelegramId(telegramId);
     if (!worker) throw new NotFoundException('Worker not found');
     worker.language = language;
     return this.repo.save(worker);
   }
 
-  async verifyWorker(workerId: number) {
+  async verifyWorker(workerId: number): Promise<WorkerEntity | null> {
     const worker: WorkerEntity = await this.findById(workerId);
     if (!worker) return null;
     if (!worker.is_verified) {
@@ -55,7 +58,7 @@ export class WorkersService {
     return worker;
   }
 
-  async listUnverified(limit = 10) {
+  async listUnverified(limit = 10): Promise<WorkerEntity[]> {
     return this.repo.find({
       where: { is_verified: false },
       order: { created_at: 'DESC' },

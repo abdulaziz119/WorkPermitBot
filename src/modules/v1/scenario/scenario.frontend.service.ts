@@ -1,6 +1,6 @@
 import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
-import { Telegraf, Markup, Context, session } from 'telegraf';
-import { TELEGRAM_BOT_TOKEN } from '../../../utils/env/env';
+import { Telegraf, Markup, Context } from 'telegraf';
+import { ensureBotLaunched, getBot } from './bot.instance';
 import { WorkersService } from '../workers/workers.service';
 import { ManagersService } from '../managers/managers.service';
 import { RequestsService } from '../requests/requests.service';
@@ -134,20 +134,12 @@ export class ScenarioFrontendService implements OnModuleInit {
     private readonly requests: RequestsService,
     private readonly attendance: AttendanceService,
   ) {
-    if (!TELEGRAM_BOT_TOKEN) {
-      throw new Error('TELEGRAM_BOT_TOKEN is not set');
-    }
-    this.bot = new Telegraf<Ctx>(TELEGRAM_BOT_TOKEN);
-    // enable in-memory session
-    this.bot.use(session());
+    this.bot = getBot();
   }
 
   onModuleInit() {
     this.registerHandlers();
-    this.bot
-      .launch()
-      .then(() => this.logger.log('Telegram bot launched'))
-      .catch((e) => this.logger.error('Bot launch error', e));
+    ensureBotLaunched(this.logger).catch(() => void 0);
   }
 
   private async getLang(ctx: Ctx): Promise<Lang> {
@@ -180,13 +172,7 @@ export class ScenarioFrontendService implements OnModuleInit {
     return Markup.inlineKeyboard(buttons);
   }
 
-  private managerMenu(lang: Lang) {
-    const tr = T[lang];
-    return Markup.inlineKeyboard([
-      [Markup.button.callback(tr.managerPendingBtn, 'mgr_pending')],
-      [Markup.button.callback(tr.managerUnverifiedBtn, 'mgr_workers_pending')],
-    ]);
-  }
+  // manager menu is handled in dashboard service
 
   private registerHandlers() {
     const bot = this.bot;
@@ -216,6 +202,7 @@ export class ScenarioFrontendService implements OnModuleInit {
             this.mainMenu(!!existingWorker.is_verified, lang),
           );
         } else {
+          // forward to dashboard commands hint
           await ctx.reply(T[lang].managerMenuHint);
         }
         return;
@@ -308,7 +295,7 @@ export class ScenarioFrontendService implements OnModuleInit {
       return ctx.answerCbQuery(T[lang].btnWaiting.replace(/[^\w\s]+$/, ''));
     });
 
-    // Worker flow: Check-in / Check-out
+    // Worker flow: Check-in / Check-out with message cleanup
     bot.action('check_in', async (ctx) => {
       const tg = ctx.from;
       const lang = await this.getLang(ctx);
@@ -316,7 +303,13 @@ export class ScenarioFrontendService implements OnModuleInit {
       if (!worker || !worker.is_verified)
         return ctx.answerCbQuery(T[lang].notVerified);
       await this.attendance.checkIn(worker.id);
-      await ctx.editMessageReplyMarkup(undefined);
+      // try clean previous inline keyboard/message
+      try {
+        await ctx.editMessageReplyMarkup(undefined);
+      } catch {}
+      try {
+        if ('message' in ctx.callbackQuery) await ctx.deleteMessage();
+      } catch {}
       await ctx.reply(T[lang].checkInDone, this.mainMenu(true, lang));
     });
 
@@ -327,7 +320,12 @@ export class ScenarioFrontendService implements OnModuleInit {
       if (!worker || !worker.is_verified)
         return ctx.answerCbQuery(T[lang].notVerified);
       await this.attendance.checkOut(worker.id);
-      await ctx.editMessageReplyMarkup(undefined);
+      try {
+        await ctx.editMessageReplyMarkup(undefined);
+      } catch {}
+      try {
+        if ('message' in ctx.callbackQuery) await ctx.deleteMessage();
+      } catch {}
       await ctx.reply(T[lang].checkOutDone, this.mainMenu(true, lang));
     });
 
@@ -384,143 +382,13 @@ export class ScenarioFrontendService implements OnModuleInit {
             `#${r.id} • ${r.status} • ${r.reason}${r.manager_comment ? `\n${T[lang].commentLabel}: ${r.manager_comment}` : ''}`,
         )
         .join('\n\n');
-      await ctx.editMessageText(lines, this.mainMenu(true, lang));
-    });
-
-    // Manager: pending requests
-    bot.command('manager', async (ctx) => {
-      const tg = ctx.from;
-      const lang = await this.getLang(ctx);
-      const manager = await this.managers.findByTelegramId(tg.id);
-      if (!manager || !manager.is_active)
-        return ctx.reply(T[lang].notActiveManager);
-      await ctx.reply(T[lang].managerMenuTitle, this.managerMenu(lang));
-    });
-
-    bot.command('activate', async (ctx) => {
-      const tg = ctx.from;
-      const lang = await this.getLang(ctx);
-      const m = await this.managers.activate(tg.id);
-      if (!m) return ctx.reply(T[lang].activateNotFound);
-      await ctx.reply(T[lang].activateOk);
-    });
-
-    bot.command('deactivate', async (ctx) => {
-      const tg = ctx.from;
-      const lang = await this.getLang(ctx);
-      const m = await this.managers.deactivate(tg.id);
-      if (!m) return ctx.reply(T[lang].deactivateNotFound);
-      await ctx.reply(T[lang].deactivateOk);
-    });
-
-    bot.action('mgr_pending', async (ctx) => {
-      const tg = ctx.from;
-      const lang = await this.getLang(ctx);
-      const manager = await this.managers.findByTelegramId(tg.id);
-      if (!manager || !manager.is_active)
-        return ctx.answerCbQuery(T[lang].noPermission);
-      const pending = await this.requests.listPending();
-      if (!pending.length) return ctx.editMessageText(T[lang].pendingEmpty);
-      for (const r of pending.slice(0, 10)) {
-        await ctx.reply(
-          `#${r.id} • Worker:${r.worker_id} • ${r.reason}`,
-          Markup.inlineKeyboard([
-            [
-              Markup.button.callback(T[lang].approveBtn, `approve_${r.id}`),
-              Markup.button.callback(T[lang].rejectBtn, `reject_${r.id}`),
-            ],
-          ]),
-        );
-      }
-    });
-
-    bot.action(/^(approve|reject)_(\d+)$/, async (ctx) => {
-      const [, action, idStr] = ctx.match;
-      const requestId = Number(idStr);
-      const tg = ctx.from;
-      const lang = await this.getLang(ctx);
-      const manager = await this.managers.findByTelegramId(tg.id);
-      if (!manager || !manager.is_active)
-        return ctx.answerCbQuery(T[lang].noPermission);
-      ctx.session ??= {};
-      ctx.session['approval_target'] = { action, requestId };
-      await ctx.reply(T[lang].approvalCommentPrompt);
-    });
-
-    bot.on('text', async (ctx, next) => {
-      // manager approval comment capture
-      const target = ctx.session?.['approval_target'];
-      if (target) {
-        const tg = ctx.from;
-        const lang = await this.getLang(ctx);
-        const manager = await this.managers.findByTelegramId(tg.id);
-        if (!manager || !manager.is_active) {
-          ctx.session['approval_target'] = undefined;
-          return ctx.reply(T[lang].noPermission);
-        }
-        const comment = ctx.message.text.trim();
-        if (target.action === 'approve') {
-          await this.requests.approve(target.requestId, manager.id, comment);
-          await ctx.reply(T[lang].approvedMsg(target.requestId));
-        } else {
-          await this.requests.reject(target.requestId, manager.id, comment);
-          await ctx.reply(T[lang].rejectedMsg(target.requestId));
-        }
-        ctx.session['approval_target'] = undefined;
-      }
-      return next?.();
-    });
-
-    // Manager: pending worker verifications
-    bot.action('mgr_workers_pending', async (ctx) => {
-      const tg = ctx.from;
-      const lang = await this.getLang(ctx);
-      const manager = await this.managers.findByTelegramId(tg.id);
-      if (!manager || !manager.is_active)
-        return ctx.answerCbQuery(T[lang].noPermission);
-      // list first 10 unverified workers
-      const list = await this.workersListUnverified(10);
-      if (!list.length)
-        return ctx.editMessageText(T[lang].unverifiedWorkersEmpty);
-      for (const w of list) {
-        await ctx.reply(
-          `Ishchi: ${w.fullname} (tg:${w.telegram_id})`,
-          Markup.inlineKeyboard([
-            [
-              Markup.button.callback(
-                T[lang].workerVerifyBtn,
-                `verify_worker_${w.id}`,
-              ),
-            ],
-          ]),
-        );
-      }
-    });
-
-    bot.action(/^verify_worker_(\d+)$/, async (ctx) => {
-      const id = Number(ctx.match[1]);
-      const tg = ctx.from;
-      const lang = await this.getLang(ctx);
-      const manager = await this.managers.findByTelegramId(tg.id);
-      if (!manager || !manager.is_active)
-        return ctx.answerCbQuery(T[lang].noPermission);
-      const verified = await this.workers.verifyWorker(id);
-      if (!verified) return ctx.answerCbQuery(T[lang].notFound);
-      await ctx.reply(T[lang].workerVerifiedMsg(verified.fullname));
-      // Notify worker about approval in their own language and show menu
       try {
-        const wLang = (verified.language as Lang) || 'uz';
-        await this.bot.telegram.sendMessage(
-          verified.telegram_id,
-          T[wLang].approvedByManager,
-          { reply_markup: this.mainMenu(true, wLang).reply_markup as any },
-        );
-      } catch (e) {
-        this.logger.warn(
-          `Could not notify verified worker ${verified.id}: ${String(e)}`,
-        );
+        await ctx.editMessageText(lines, this.mainMenu(true, lang));
+      } catch {
+        await ctx.reply(lines, this.mainMenu(true, lang));
       }
     });
+    // Manager flows moved to ScenarioDashboardService
   }
 
   private async notifyManagersByLang(messageUz: string, messageRu: string) {

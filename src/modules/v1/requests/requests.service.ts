@@ -11,8 +11,12 @@ export class RequestsService {
     private readonly repo: Repository<RequestEntity>,
   ) {}
 
-  async createRequest(workerId: number, reason: string, approvedDate?: Date) {
-    const entity = this.repo.create({
+  async createRequest(
+    workerId: number,
+    reason: string,
+    approvedDate?: Date,
+  ): Promise<RequestEntity> {
+    const entity: RequestEntity = this.repo.create({
       worker_id: workerId,
       reason,
       approved_date: approvedDate || null,
@@ -21,22 +25,28 @@ export class RequestsService {
     return this.repo.save(entity);
   }
 
-  async listPending() {
+  async listPending(): Promise<RequestEntity[]> {
     return this.repo.find({
       where: { status: RequestsStatusEnum.PENDING },
       order: { created_at: 'DESC' },
     });
   }
 
-  async listByWorker(workerId: number) {
+  async listByWorker(workerId: number): Promise<RequestEntity[]> {
     return this.repo.find({
       where: { worker_id: workerId },
       order: { created_at: 'DESC' },
     });
   }
 
-  async approve(requestId: number, managerId: number, comment?: string) {
-    const entity = await this.repo.findOne({ where: { id: requestId } });
+  async approve(
+    requestId: number,
+    managerId: number,
+    comment?: string,
+  ): Promise<RequestEntity | null> {
+    const entity: RequestEntity = await this.repo.findOne({
+      where: { id: requestId },
+    });
     if (!entity) return null;
     entity.status = RequestsStatusEnum.APPROVED;
     entity.manager_id = managerId;
@@ -44,7 +54,11 @@ export class RequestsService {
     return this.repo.save(entity);
   }
 
-  async reject(requestId: number, managerId: number, comment?: string) {
+  async reject(
+    requestId: number,
+    managerId: number,
+    comment?: string,
+  ): Promise<RequestEntity | null> {
     const entity: RequestEntity = await this.repo.findOne({
       where: { id: requestId },
     });

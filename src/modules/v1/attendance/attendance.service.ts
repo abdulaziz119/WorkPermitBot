@@ -3,13 +3,13 @@ import { Repository } from 'typeorm';
 import { MODELS } from '../../../constants/constants';
 import { AttendanceEntity } from '../../../entity/attendance.entity';
 
-function startOfDay(date = new Date()) {
+function startOfDay(date = new Date()): Date {
   const d = new Date(date);
   d.setHours(0, 0, 0, 0);
   return d;
 }
 
-function endOfDay(date = new Date()) {
+function endOfDay(date = new Date()): Date {
   const d = new Date(date);
   d.setHours(23, 59, 59, 999);
   return d;
@@ -22,7 +22,10 @@ export class AttendanceService {
     private readonly repo: Repository<AttendanceEntity>,
   ) {}
 
-  async getToday(workerId: number, today = new Date()) {
+  async getToday(
+    workerId: number,
+    today = new Date(),
+  ): Promise<AttendanceEntity> {
     const from: Date = startOfDay(today);
     const to: Date = endOfDay(today);
     return this.repo
@@ -33,7 +36,7 @@ export class AttendanceService {
       .getOne();
   }
 
-  async checkIn(workerId: number) {
+  async checkIn(workerId: number): Promise<AttendanceEntity> {
     let today: AttendanceEntity = await this.getToday(workerId);
     if (!today) {
       today = this.repo.create({ worker_id: workerId, check_in: new Date() });
@@ -42,7 +45,7 @@ export class AttendanceService {
     return this.repo.save(today);
   }
 
-  async checkOut(workerId: number) {
+  async checkOut(workerId: number): Promise<AttendanceEntity> {
     let today: AttendanceEntity = await this.getToday(workerId);
     if (!today) {
       today = this.repo.create({ worker_id: workerId });

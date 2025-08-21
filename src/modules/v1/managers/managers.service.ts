@@ -10,7 +10,7 @@ export class ManagersService {
     private readonly managerRepo: Repository<ManagerEntity>,
   ) {}
 
-  async findByTelegramId(telegramId: number) {
+  async findByTelegramId(telegramId: number): Promise<ManagerEntity> {
     return this.managerRepo.findOne({ where: { telegram_id: telegramId } });
   }
 
@@ -18,8 +18,8 @@ export class ManagersService {
     telegram_id: number,
     fullname: string,
     language: 'uz' | 'ru' = 'uz',
-  ) {
-    let manager = await this.findByTelegramId(telegram_id);
+  ): Promise<ManagerEntity> {
+    let manager: ManagerEntity = await this.findByTelegramId(telegram_id);
     if (manager) return manager;
     manager = this.managerRepo.create({
       telegram_id,
@@ -30,25 +30,34 @@ export class ManagersService {
     return this.managerRepo.save(manager);
   }
 
-  async setLanguage(telegram_id: number, language: 'uz' | 'ru') {
+  async setLanguage(
+    telegram_id: number,
+    language: 'uz' | 'ru',
+  ): Promise<ManagerEntity> {
     const manager: ManagerEntity = await this.findByTelegramId(telegram_id);
     if (!manager) throw new NotFoundException('Manager not found');
     manager.language = language;
     return this.managerRepo.save(manager);
   }
 
-  async setActive(telegram_id: number, active: boolean) {
+  async setActive(
+    telegram_id: number,
+    active: boolean,
+  ): Promise<ManagerEntity> {
     const manager: ManagerEntity = await this.findByTelegramId(telegram_id);
     if (!manager) throw new NotFoundException('Manager not found');
     manager.is_active = active;
     return this.managerRepo.save(manager);
   }
 
-  async listActiveManagers() {
+  async listActiveManagers(): Promise<ManagerEntity[]> {
     return this.managerRepo.find({ where: { is_active: true } });
   }
 
-  async createOrGet(telegramId: number, fullname: string) {
+  async createOrGet(
+    telegramId: number,
+    fullname: string,
+  ): Promise<ManagerEntity> {
     let manager: ManagerEntity = await this.findByTelegramId(telegramId);
     if (!manager) {
       manager = this.managerRepo.create({
@@ -64,7 +73,7 @@ export class ManagersService {
     return manager;
   }
 
-  async activate(telegramId: number) {
+  async activate(telegramId: number): Promise<ManagerEntity> {
     const manager: ManagerEntity = await this.findByTelegramId(telegramId);
     if (!manager) return null;
     if (!manager.is_active) {
@@ -74,11 +83,11 @@ export class ManagersService {
     return manager;
   }
 
-  async listActive() {
+  async listActive(): Promise<ManagerEntity[]> {
     return this.managerRepo.find({ where: { is_active: true } });
   }
 
-  async deactivate(telegramId: number) {
+  async deactivate(telegramId: number): Promise<ManagerEntity> {
     const manager: ManagerEntity = await this.findByTelegramId(telegramId);
     if (!manager) return null;
     if (manager.is_active) {

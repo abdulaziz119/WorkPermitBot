@@ -5,6 +5,7 @@ import { WorkersModule } from '../workers/workers.module';
 import { ManagersModule } from '../managers/managers.module';
 import { RequestModule } from '../requests/requests.module';
 import { AttendanceModule } from '../attendance/attendance.module';
+import { ScenarioDashboardService } from './scenario.dashboard.service';
 
 @Module({
   imports: [
@@ -15,6 +16,6 @@ import { AttendanceModule } from '../attendance/attendance.module';
     AttendanceModule,
   ],
   controllers: [],
-  providers: [ScenarioFrontendService],
+  providers: [ScenarioFrontendService, ScenarioDashboardService],
 })
 export class ScenarioModule {}
