@@ -603,10 +603,14 @@ export class ScenarioDashboardService implements OnModuleInit {
           period,
         );
 
-        // Group attendances by worker
+        // Get leave requests for the period
+        const requests = await this.requests.getRequestsByPeriod(workerIds, period);
+
+        // Group attendances and requests by worker
         const data = workers.map((worker) => ({
           worker,
           attendances: attendances.filter((a) => a.worker_id === worker.id),
+          requests: requests.filter((r) => r.worker_id === worker.id),
         }));
 
         const buffer = this.excel.generateExcelBuffer(data, period);
@@ -643,10 +647,14 @@ export class ScenarioDashboardService implements OnModuleInit {
           period,
         );
 
+        // Get leave requests for this worker and period
+        const requests = await this.requests.getRequestsByPeriod([workerId], period);
+
         // Data for single worker
         const data = [{
           worker,
           attendances: attendances.filter((a) => a.worker_id === workerId),
+          requests: requests.filter((r) => r.worker_id === workerId),
         }];
 
         const buffer = this.excel.generateExcelBuffer(data, period);

@@ -68,4 +68,36 @@ export class RequestsService {
     entity.manager_comment = comment || null;
     return this.repo.save(entity);
   }
+
+  async getRequestsByPeriod(
+    workerIds: number[],
+    period: 'day' | 'week' | 'month' | 'year',
+  ): Promise<RequestEntity[]> {
+    const now = new Date();
+    let startDate: Date;
+
+    switch (period) {
+      case 'day':
+        startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+        break;
+      case 'week':
+        const startOfWeek = new Date(now);
+        startOfWeek.setDate(now.getDate() - now.getDay());
+        startDate = new Date(startOfWeek.getFullYear(), startOfWeek.getMonth(), startOfWeek.getDate());
+        break;
+      case 'month':
+        startDate = new Date(now.getFullYear(), now.getMonth(), 1);
+        break;
+      case 'year':
+        startDate = new Date(now.getFullYear(), 0, 1);
+        break;
+    }
+
+    return this.repo
+      .createQueryBuilder('request')
+      .where('request.worker_id IN (:...workerIds)', { workerIds })
+      .andWhere('request.approved_date >= :startDate', { startDate })
+      .andWhere('request.approved_date <= :endDate', { endDate: now })
+      .getMany();
+  }
 }
