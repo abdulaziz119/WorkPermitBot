@@ -389,7 +389,7 @@ export class ScenarioFrontendService implements OnModuleInit {
         .slice(0, 10)
         .map(
           (r) =>
-            `#${r.id} • ${r.status} • ${r.reason}${r.manager_comment ? `\n${T[lang].commentLabel}: ${r.manager_comment}` : ''}`,
+            `#${r.id} • ${this.statusLabel(lang, String(r.status))} • ${r.reason}${r.manager_comment ? `\n${T[lang].commentLabel}: ${r.manager_comment}` : ''}`,
         )
         .join('\n\n');
       try {
@@ -417,6 +417,22 @@ export class ScenarioFrontendService implements OnModuleInit {
       }
     });
     // Manager flows moved to ScenarioDashboardService
+  }
+
+  // Map request status enum values to localized labels for UX
+  private statusLabel(lang: Lang, status: string): string {
+    const mapUz: Record<string, string> = {
+      pending: 'Kutilmoqda',
+      approved: 'Ruxsat berildi',
+      rejected: 'Rad etildi',
+    };
+    const mapRu: Record<string, string> = {
+      pending: 'В ожидании',
+      approved: 'Одобрено',
+      rejected: 'Отклонено',
+    };
+    const table = lang === 'ru' ? mapRu : mapUz;
+    return table[status] ?? status;
   }
 
   private async notifyManagersByLang(messageUz: string, messageRu: string) {
