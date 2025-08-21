@@ -129,7 +129,9 @@ export class ScenarioDashboardService implements OnModuleInit {
       const manager = await this.managers.findByTelegramId(tg.id);
       if (!manager || !manager.is_active)
         return ctx.answerCbQuery(T[lang].noPermission);
-  try { await ctx.editMessageReplyMarkup(undefined); } catch {}
+      try {
+        await ctx.editMessageReplyMarkup(undefined);
+      } catch {}
       const pending = await this.requests.listPending();
       if (!pending.length) return ctx.editMessageText(T[lang].pendingEmpty);
       for (const r of pending.slice(0, 10)) {
@@ -190,7 +192,9 @@ export class ScenarioDashboardService implements OnModuleInit {
       const manager = await this.managers.findByTelegramId(tg.id);
       if (!manager || !manager.is_active)
         return ctx.answerCbQuery(T[lang].noPermission);
-  try { await ctx.editMessageReplyMarkup(undefined); } catch {}
+      try {
+        await ctx.editMessageReplyMarkup(undefined);
+      } catch {}
       const list = await this.workers.listUnverified(10);
       if (!list.length)
         return ctx.editMessageText(T[lang].unverifiedWorkersEmpty);
@@ -224,17 +228,131 @@ export class ScenarioDashboardService implements OnModuleInit {
         const wLang = (verified.language as Lang) || 'uz';
         // build minimal worker menu (check-in/out etc.) inline keyboard
         const buttons: any[] = [];
-        buttons.push([Markup.button.callback(wLang === 'ru' ? 'Пришёл (Check-in) ✅' : 'Kelish (Check-in) ✅', 'check_in')]);
-        buttons.push([Markup.button.callback(wLang === 'ru' ? 'Ушёл (Check-out) 🕘' : 'Ketish (Check-out) 🕘', 'check_out')]);
-        buttons.push([Markup.button.callback(wLang === 'ru' ? 'Запросить отгул 📝' : 'Javob soʼrash 📝', 'request_leave')]);
-        buttons.push([Markup.button.callback(wLang === 'ru' ? 'Мои запросы 📄' : 'Mening soʼrovlarim 📄', 'my_requests')]);
+        buttons.push([
+          Markup.button.callback(
+            wLang === 'ru' ? 'Пришёл (Check-in) ✅' : 'Kelish (Check-in) ✅',
+            'check_in',
+          ),
+        ]);
+        buttons.push([
+          Markup.button.callback(
+            wLang === 'ru' ? 'Ушёл (Check-out) 🕘' : 'Ketish (Check-out) 🕘',
+            'check_out',
+          ),
+        ]);
+        buttons.push([
+          Markup.button.callback(
+            wLang === 'ru' ? 'Запросить отгул 📝' : 'Javob soʼrash 📝',
+            'request_leave',
+          ),
+        ]);
+        buttons.push([
+          Markup.button.callback(
+            wLang === 'ru' ? 'Мои запросы 📄' : 'Mening soʼrovlarim 📄',
+            'my_requests',
+          ),
+        ]);
         await this.bot.telegram.sendMessage(
           verified.telegram_id,
-          wLang === 'ru' ? 'Ваш профиль подтверждён менеджером ✅' : 'Profilingiz menejer tomonidan tasdiqlandi ✅',
+          wLang === 'ru'
+            ? 'Ваш профиль подтверждён менеджером ✅'
+            : 'Profilingiz menejer tomonidan tasdiqlandi ✅',
           { reply_markup: { inline_keyboard: buttons } as any },
         );
       } catch (e) {
-        this.logger.warn(`Could not notify verified worker ${verified.id}: ${String(e)}`);
+        this.logger.warn(
+          `Could not notify verified worker ${verified.id}: ${String(e)}`,
+        );
+      }
+    });
+
+    // Approve/Reject inline from new worker notification
+    bot.action(/^approve_worker_(\d+)$/, async (ctx) => {
+      const id = Number(ctx.match[1]);
+      const tg = ctx.from;
+      const lang = await this.getLang(ctx);
+      const manager = await this.managers.findByTelegramId(tg.id);
+      if (!manager || !manager.is_active)
+        return ctx.answerCbQuery(T[lang].noPermission);
+      const verified = await this.workers.verifyWorker(id);
+      if (!verified) return ctx.answerCbQuery(T[lang].notFound);
+      try {
+        await ctx.editMessageReplyMarkup(undefined);
+      } catch {}
+      await ctx.reply(T[lang].workerVerifiedMsg(verified.fullname));
+      // Notify worker about approval
+      try {
+        const wLang = (verified.language as Lang) || 'uz';
+        const buttons: any[] = [];
+        buttons.push([
+          Markup.button.callback(
+            wLang === 'ru' ? 'Пришёл (Check-in) ✅' : 'Kelish (Check-in) ✅',
+            'check_in',
+          ),
+        ]);
+        buttons.push([
+          Markup.button.callback(
+            wLang === 'ru' ? 'Ушёл (Check-out) 🕘' : 'Ketish (Check-out) 🕘',
+            'check_out',
+          ),
+        ]);
+        buttons.push([
+          Markup.button.callback(
+            wLang === 'ru' ? 'Запросить отгул 📝' : 'Javob soʼrash 📝',
+            'request_leave',
+          ),
+        ]);
+        buttons.push([
+          Markup.button.callback(
+            wLang === 'ru' ? 'Мои запросы 📄' : 'Mening soʼrovlarim 📄',
+            'my_requests',
+          ),
+        ]);
+        await this.bot.telegram.sendMessage(
+          verified.telegram_id,
+          wLang === 'ru'
+            ? 'Ваш профиль подтверждён менеджером ✅'
+            : 'Profilingiz menejer tomonidan tasdiqlandi ✅',
+          { reply_markup: { inline_keyboard: buttons } as any },
+        );
+      } catch (e) {
+        this.logger.warn(
+          `Could not notify verified worker ${verified.id}: ${String(e)}`,
+        );
+      }
+    });
+
+    bot.action(/^reject_worker_(\d+)$/, async (ctx) => {
+      const id = Number(ctx.match[1]);
+      const tg = ctx.from;
+      const lang = await this.getLang(ctx);
+      const manager = await this.managers.findByTelegramId(tg.id);
+      if (!manager || !manager.is_active)
+        return ctx.answerCbQuery(T[lang].noPermission);
+      try {
+        await ctx.editMessageReplyMarkup(undefined);
+      } catch {}
+      await ctx.reply(
+        lang === 'ru'
+          ? `Заявка работника #${id} отклонена ❌`
+          : `Ishchi #${id} arizasi rad etildi ❌`,
+      );
+      // Optionally notify the worker of rejection
+      try {
+        const w = await this.workers.findById(id);
+        if (w) {
+          const wLang = (w.language as Lang) || 'uz';
+          await this.bot.telegram.sendMessage(
+            w.telegram_id,
+            wLang === 'ru'
+              ? 'Ваш профиль отклонён ❌'
+              : 'Profilingiz rad etildi ❌',
+          );
+        }
+      } catch (e) {
+        this.logger.warn(
+          `Could not notify rejected worker ${id}: ${String(e)}`,
+        );
       }
     });
   }

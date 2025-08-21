@@ -438,10 +438,11 @@ export class ScenarioFrontendService implements OnModuleInit {
           const worker = await this.workers.createOrGet(tgId, name, lang);
           await ctx.reply(T[lang].workerCreated);
           if (!worker.is_verified) {
-            await this.notifyManagersByLang(
-              T.uz.newWorkerNotify(worker.fullname, tgId),
-              T.ru.newWorkerNotify(worker.fullname, tgId),
-            );
+            await this.notifyManagersNewWorker({
+              id: worker.id,
+              fullname: worker.fullname,
+              telegram_id: tgId,
+            });
           }
           await ctx.reply(
             worker.is_verified
@@ -592,6 +593,45 @@ export class ScenarioFrontendService implements OnModuleInit {
       );
     } catch (e: any) {
       this.logger.error('notifyManagersByLang error', e?.message || e);
+    }
+  }
+
+  private async notifyManagersNewWorker(worker: {
+    id: number;
+    fullname: string;
+    telegram_id: number;
+  }) {
+    try {
+      const managers = await this.managers.listActive();
+      await Promise.all(
+        managers.map(async (m) => {
+          const text =
+            m.language === 'ru'
+              ? `Новый работник: ${worker.fullname} (tg:${worker.telegram_id}). Требуется подтверждение.`
+              : `Yangi ishchi: ${worker.fullname} (tg:${worker.telegram_id}). Tasdiqlash kerak.`;
+          const kb = Markup.inlineKeyboard([
+            [
+              Markup.button.callback(
+                m.language === 'ru' ? 'Подтвердить 👌' : 'Tasdiqlash 👌',
+                `approve_worker_${worker.id}`,
+              ),
+              Markup.button.callback(
+                m.language === 'ru' ? 'Отклонить ❌' : 'Rad etish ❌',
+                `reject_worker_${worker.id}`,
+              ),
+            ],
+          ]);
+          await this.bot.telegram
+            .sendMessage(m.telegram_id, text, kb)
+            .catch((e) =>
+              this.logger.warn(
+                `Notify new worker fail to ${m.telegram_id}: ${e.message}`,
+              ),
+            );
+        }),
+      );
+    } catch (e: any) {
+      this.logger.error('notifyManagersNewWorker error', e?.message || e);
     }
   }
 
