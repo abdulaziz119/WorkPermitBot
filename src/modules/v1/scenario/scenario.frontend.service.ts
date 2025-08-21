@@ -28,6 +28,7 @@ const T = {
     btnCheckOut: 'Ketish (Check-out) 🕘',
     btnRequestLeave: 'Javob soʼrash 📝',
     btnMyRequests: 'Mening soʼrovlarim 📄',
+  backBtn: 'Qaytish ◀',
     btnWaiting: 'Tasdiqlashni kutish ⏳',
     notVerified: 'Siz hali tasdiqlanmagansiz',
     checkInDone: 'Check-in qayd etildi ✅',
@@ -84,6 +85,7 @@ const T = {
     btnCheckOut: 'Ушёл (Check-out) 🕘',
     btnRequestLeave: 'Запросить отгул 📝',
     btnMyRequests: 'Мои запросы 📄',
+  backBtn: 'Назад ◀',
     btnWaiting: 'Ожидается подтверждение ⏳',
     notVerified: 'Вы ещё не подтверждены',
     checkInDone: 'Check-in записан ✅',
@@ -170,6 +172,13 @@ export class ScenarioFrontendService implements OnModuleInit {
       buttons.push([Markup.button.callback(tr.btnWaiting, 'noop')]);
     }
     return Markup.inlineKeyboard(buttons);
+  }
+
+  private backKeyboard(lang: Lang) {
+    const tr = T[lang];
+    return Markup.inlineKeyboard([
+      [Markup.button.callback(tr.backBtn, 'back_to_menu')],
+    ]);
   }
 
   // manager menu is handled in dashboard service
@@ -374,7 +383,8 @@ export class ScenarioFrontendService implements OnModuleInit {
       const lang = await this.getLang(ctx);
       if (!worker) return ctx.answerCbQuery(T[lang].notFound);
       const list = await this.requests.listByWorker(worker.id);
-      if (!list.length) return ctx.editMessageText(T[lang].noRequests);
+      if (!list.length)
+        return ctx.editMessageText(T[lang].noRequests, this.backKeyboard(lang));
       const lines = list
         .slice(0, 10)
         .map(
@@ -383,9 +393,27 @@ export class ScenarioFrontendService implements OnModuleInit {
         )
         .join('\n\n');
       try {
-        await ctx.editMessageText(lines, this.mainMenu(true, lang));
+        await ctx.editMessageText(lines, this.backKeyboard(lang));
       } catch {
-        await ctx.reply(lines, this.mainMenu(true, lang));
+        await ctx.reply(lines, this.backKeyboard(lang));
+      }
+    });
+
+    // Back to main menu from lists
+    bot.action('back_to_menu', async (ctx) => {
+      const lang = await this.getLang(ctx);
+      const tgId = Number(ctx.from?.id);
+      const worker = await this.workers.findByTelegramId(tgId);
+      const isVerified = !!worker?.is_verified;
+      const text = worker
+        ? isVerified
+          ? T[lang].greetingVerified(worker.fullname)
+          : T[lang].greetingPending(worker.fullname)
+        : T[lang].notFound;
+      try {
+        await ctx.editMessageText(text, this.mainMenu(isVerified, lang));
+      } catch {
+        await ctx.reply(text, this.mainMenu(isVerified, lang));
       }
     });
     // Manager flows moved to ScenarioDashboardService
