@@ -66,7 +66,7 @@ export class AttendanceService {
 
   async checkOut(workerId: number): Promise<AttendanceEntity> {
     const now = new Date();
-    let today: AttendanceEntity | null = await this.getToday(workerId, now);
+    const today: AttendanceEntity | null = await this.getToday(workerId, now);
     if (!today || !today.check_in) {
       const err = new Error('CHECKIN_REQUIRED');
       // @ts-ignore
@@ -102,5 +102,44 @@ export class AttendanceService {
     if (payload.check_in) rec.check_in = payload.check_in;
     if (payload.check_out) rec.check_out = payload.check_out;
     return this.repo.save(rec);
+  }
+
+  async getAttendanceByPeriod(
+    workerIds: number[],
+    period: 'day' | 'week' | 'month' | 'year',
+  ): Promise<AttendanceEntity[]> {
+    const now = new Date();
+    let startDate: Date;
+    const endDate: Date = endOfDay(now);
+
+    switch (period) {
+      case 'day':
+        startDate = startOfDay(now);
+        break;
+      case 'week':
+        startDate = new Date(now);
+        startDate.setDate(now.getDate() - 7);
+        startDate = startOfDay(startDate);
+        break;
+      case 'month':
+        startDate = new Date(now.getFullYear(), now.getMonth(), 1);
+        startDate = startOfDay(startDate);
+        break;
+      case 'year':
+        startDate = new Date(now.getFullYear(), 0, 1);
+        startDate = startOfDay(startDate);
+        break;
+    }
+
+    return this.repo
+      .createQueryBuilder('a')
+      .where('a.worker_id IN (:...workerIds)', { workerIds })
+      .andWhere('a.created_at BETWEEN :startDate AND :endDate', {
+        startDate,
+        endDate,
+      })
+      .orderBy('a.worker_id', 'ASC')
+      .addOrderBy('a.created_at', 'DESC')
+      .getMany();
   }
 }

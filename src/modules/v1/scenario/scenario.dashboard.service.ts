@@ -4,6 +4,8 @@ import { ensureBotLaunched, getBot } from './bot.instance';
 import { ManagersService } from '../managers/managers.service';
 import { RequestsService } from '../requests/requests.service';
 import { WorkersService } from '../workers/workers.service';
+import { AttendanceService } from '../attendance/attendance.service';
+import { WorkersExcelService } from '../../../utils/workers.excel';
 
 type Ctx = Context & { session?: Record<string, any> };
 type Lang = 'uz' | 'ru';
@@ -11,7 +13,9 @@ type Lang = 'uz' | 'ru';
 const T = {
   uz: {
     managerMenuTitle: 'Manager menyusi:',
+    superAdminMenuTitle: 'Super Admin menyusi:',
     notActiveManager: 'Siz active manager emassiz.',
+    notSuperAdmin: 'Siz super admin emassiz.',
     activateOk:
       'Siz manager sifatida faollashtirildingiz ✅. /manager buyrugʼini bosing.',
     activateNotFound: 'Manager sifatida roʼyxatda topilmadingiz.',
@@ -26,15 +30,33 @@ const T = {
     approvedMsg: (id: number) => `#${id} tasdiqlandi ✅`,
     rejectedMsg: (id: number) => `#${id} rad etildi ❌`,
     unverifiedWorkersEmpty: 'Tasdiqlanmagan ishchilar yoʼq.',
+    verifiedWorkersEmpty: 'Tasdiqlangan ishchilar yoʼq.',
+    unverifiedManagersEmpty: 'Tasdiqlanmagan managerlar yoʼq.',
     workerVerifyBtn: 'Tasdiqlash 👌',
     workerVerifiedMsg: (name: string) => `Ishchi tasdiqlandi: ${name}`,
+    managerVerifiedMsg: (name: string) => `Manager tasdiqlandi: ${name}`,
     managerPendingBtn: 'Kutilayotgan soʼrovlar 🔔',
     managerUnverifiedBtn: 'Tasdiqlanmagan ishchilar 👤',
+    superAdminUnverifiedManagersBtn: 'Tasdiqlanmagan managerlar 👨‍💼',
+    viewWorkersBtn: 'Ishchilarni koʼrish 👥',
+    backBtn: 'Qaytish ◀',
+    nextBtn: 'Keyingi ➡️',
+    prevBtn: '⬅️ Oldingi',
+    mainMenuBtn: 'Asosiy menyu 🏠',
+    attendanceToday: 'Bugun',
+    attendancePresent: '✅ Kelgan',
+    attendanceAbsent: '❌ Kelmagan',
+    exportDaily: '1 kunlik 📊',
+    exportWeekly: '1 haftalik 📊',
+    exportMonthly: '1 oylik 📊',
+    exportYearly: '1 yillik 📊',
     notFound: 'Topilmadi',
   },
   ru: {
     managerMenuTitle: 'Меню менеджера:',
+    superAdminMenuTitle: 'Меню супер админа:',
     notActiveManager: 'Вы не активный менеджер.',
+    notSuperAdmin: 'Вы не супер админ.',
     activateOk: 'Вы активированы как менеджер ✅. Нажмите /manager для меню.',
     activateNotFound: 'Вы не найдены как менеджер.',
     deactivateOk: 'Статус менеджера отключён.',
@@ -48,10 +70,26 @@ const T = {
     approvedMsg: (id: number) => `#${id} одобрен ✅`,
     rejectedMsg: (id: number) => `#${id} отклонён ❌`,
     unverifiedWorkersEmpty: 'Нет неподтверждённых работников.',
+    verifiedWorkersEmpty: 'Нет подтверждённых работников.',
+    unverifiedManagersEmpty: 'Нет неподтверждённых менеджеров.',
     workerVerifyBtn: 'Подтвердить 👌',
     workerVerifiedMsg: (name: string) => `Работник подтверждён: ${name}`,
+    managerVerifiedMsg: (name: string) => `Менеджер подтверждён: ${name}`,
     managerPendingBtn: 'Ожидающие запросы 🔔',
     managerUnverifiedBtn: 'Неподтверждённые работники 👤',
+    superAdminUnverifiedManagersBtn: 'Неподтверждённые менеджеры 👨‍💼',
+    viewWorkersBtn: 'Просмотр работников 👥',
+    backBtn: 'Назад ◀',
+    nextBtn: 'Далее ➡️',
+    prevBtn: '⬅️ Назад',
+    mainMenuBtn: 'Главное меню 🏠',
+    attendanceToday: 'Сегодня',
+    attendancePresent: '✅ Пришёл',
+    attendanceAbsent: '❌ Не пришёл',
+    exportDaily: '1 день 📊',
+    exportWeekly: '1 неделя 📊',
+    exportMonthly: '1 месяц 📊',
+    exportYearly: '1 год 📊',
     notFound: 'Не найдено',
   },
 } as const;
@@ -65,6 +103,8 @@ export class ScenarioDashboardService implements OnModuleInit {
     private readonly managers: ManagersService,
     private readonly requests: RequestsService,
     private readonly workers: WorkersService,
+    private readonly attendance: AttendanceService,
+    private readonly excel: WorkersExcelService,
   ) {
     this.bot = getBot();
   }
@@ -90,6 +130,29 @@ export class ScenarioDashboardService implements OnModuleInit {
     return Markup.inlineKeyboard([
       [Markup.button.callback(tr.managerPendingBtn, 'mgr_pending')],
       [Markup.button.callback(tr.managerUnverifiedBtn, 'mgr_workers_pending')],
+      [Markup.button.callback(tr.viewWorkersBtn, 'mgr_view_workers')],
+    ]);
+  }
+
+  private superAdminMenu(lang: Lang) {
+    const tr = T[lang];
+    return Markup.inlineKeyboard([
+      [Markup.button.callback(tr.managerPendingBtn, 'mgr_pending')],
+      [Markup.button.callback(tr.managerUnverifiedBtn, 'mgr_workers_pending')],
+      [
+        Markup.button.callback(
+          tr.superAdminUnverifiedManagersBtn,
+          'mgr_managers_pending',
+        ),
+      ],
+      [Markup.button.callback(tr.viewWorkersBtn, 'mgr_view_workers')],
+    ]);
+  }
+
+  private backToMenuKeyboard(lang: Lang) {
+    const tr = T[lang];
+    return Markup.inlineKeyboard([
+      [Markup.button.callback(tr.mainMenuBtn, 'mgr_back_to_menu')],
     ]);
   }
 
@@ -103,7 +166,24 @@ export class ScenarioDashboardService implements OnModuleInit {
       const manager = await this.managers.findByTelegramId(tg.id);
       if (!manager || !manager.is_active)
         return ctx.reply(T[lang].notActiveManager);
-      await ctx.reply(T[lang].managerMenuTitle, this.managerMenu(lang));
+
+      const isSuperAdmin = await this.managers.isSuperAdmin(tg.id);
+      const menu = isSuperAdmin
+        ? this.superAdminMenu(lang)
+        : this.managerMenu(lang);
+      const title = isSuperAdmin
+        ? T[lang].superAdminMenuTitle
+        : T[lang].managerMenuTitle;
+
+      await ctx.reply(title, menu);
+    });
+
+    bot.command('superadmin', async (ctx) => {
+      const tg = ctx.from;
+      const lang = await this.getLang(ctx);
+      const isSuperAdmin = await this.managers.isSuperAdmin(tg.id);
+      if (!isSuperAdmin) return ctx.reply(T[lang].notSuperAdmin);
+      await ctx.reply(T[lang].superAdminMenuTitle, this.superAdminMenu(lang));
     });
 
     bot.command('activate', async (ctx) => {
@@ -133,7 +213,10 @@ export class ScenarioDashboardService implements OnModuleInit {
         await ctx.editMessageReplyMarkup(undefined);
       } catch {}
       const pending = await this.requests.listPending();
-      if (!pending.length) return ctx.editMessageText(T[lang].pendingEmpty);
+      if (!pending.length) 
+        return ctx.editMessageText(T[lang].pendingEmpty, this.backToMenuKeyboard(lang));
+      
+      let message = `${T[lang].managerPendingBtn}:\n\n`;
       for (const r of pending.slice(0, 10)) {
         await ctx.reply(
           `#${r.id} • Worker:${r.worker_id} • ${r.reason}`,
@@ -145,6 +228,12 @@ export class ScenarioDashboardService implements OnModuleInit {
           ]),
         );
       }
+      
+      // Send back button after the list
+      await ctx.reply(
+        T[lang].managerPendingBtn,
+        this.backToMenuKeyboard(lang)
+      );
     });
 
     // Approve / Reject capture
@@ -197,7 +286,9 @@ export class ScenarioDashboardService implements OnModuleInit {
       } catch {}
       const list = await this.workers.listUnverified(10);
       if (!list.length)
-        return ctx.editMessageText(T[lang].unverifiedWorkersEmpty);
+        return ctx.editMessageText(T[lang].unverifiedWorkersEmpty, this.backToMenuKeyboard(lang));
+      
+      let message = `${T[lang].managerUnverifiedBtn}:\n\n`;
       for (const w of list) {
         await ctx.reply(
           `Ishchi: ${w.fullname} (tg:${w.telegram_id})`,
@@ -211,6 +302,12 @@ export class ScenarioDashboardService implements OnModuleInit {
           ]),
         );
       }
+      
+      // Send back button after the list
+      await ctx.reply(
+        T[lang].managerUnverifiedBtn,
+        this.backToMenuKeyboard(lang)
+      );
     });
 
     bot.action(/^verify_worker_(\d+)$/, async (ctx) => {
@@ -352,6 +449,269 @@ export class ScenarioDashboardService implements OnModuleInit {
       } catch (e) {
         this.logger.warn(
           `Could not notify rejected worker ${id}: ${String(e)}`,
+        );
+      }
+    });
+
+    // Back to main menu
+    bot.action('mgr_back_to_menu', async (ctx) => {
+      const tg = ctx.from;
+      const lang = await this.getLang(ctx);
+      const manager = await this.managers.findByTelegramId(tg.id);
+      if (!manager || !manager.is_active)
+        return ctx.answerCbQuery(T[lang].noPermission);
+
+      const isSuperAdmin = await this.managers.isSuperAdmin(tg.id);
+      const menu = isSuperAdmin
+        ? this.superAdminMenu(lang)
+        : this.managerMenu(lang);
+      const title = isSuperAdmin
+        ? T[lang].superAdminMenuTitle
+        : T[lang].managerMenuTitle;
+
+      try {
+        await ctx.editMessageText(title, menu);
+      } catch {
+        await ctx.reply(title, menu);
+      }
+    });
+
+    // View workers with pagination
+    bot.action(/^mgr_view_workers(?:_(\d+))?$/, async (ctx) => {
+      const tg = ctx.from;
+      const lang = await this.getLang(ctx);
+      const manager = await this.managers.findByTelegramId(tg.id);
+      if (!manager || !manager.is_active)
+        return ctx.answerCbQuery(T[lang].noPermission);
+
+      const page = ctx.match[1] ? Number(ctx.match[1]) : 1;
+      const result = await this.workers.listVerifiedPaginated(page, 5);
+
+      if (result.workers.length === 0) {
+        return ctx.editMessageText(T[lang].verifiedWorkersEmpty, this.backToMenuKeyboard(lang));
+      }
+
+      let message = `${T[lang].viewWorkersBtn} (${page}/${Math.ceil(result.total / 5)}):\n\n`;
+
+      for (const worker of result.workers) {
+        const todayAttendance = await this.attendance.getToday(worker.id);
+        const status = todayAttendance?.check_in
+          ? T[lang].attendancePresent
+          : T[lang].attendanceAbsent;
+        message += `👤 ${worker.fullname}\n${T[lang].attendanceToday}: ${status}\n\n`;
+      }
+
+      const buttons: any[] = [];
+
+      // Pagination buttons
+      const navButtons = [];
+      if (result.hasPrev) {
+        navButtons.push(
+          Markup.button.callback(
+            T[lang].prevBtn,
+            `mgr_view_workers_${page - 1}`,
+          ),
+        );
+      }
+      if (result.hasNext) {
+        navButtons.push(
+          Markup.button.callback(
+            T[lang].nextBtn,
+            `mgr_view_workers_${page + 1}`,
+          ),
+        );
+      }
+      if (navButtons.length > 0) {
+        buttons.push(navButtons);
+      }
+
+      // Export buttons
+      buttons.push([
+        Markup.button.callback(T[lang].exportDaily, 'mgr_export_day'),
+        Markup.button.callback(T[lang].exportWeekly, 'mgr_export_week'),
+      ]);
+      buttons.push([
+        Markup.button.callback(T[lang].exportMonthly, 'mgr_export_month'),
+        Markup.button.callback(T[lang].exportYearly, 'mgr_export_year'),
+      ]);
+
+      // Back button
+      buttons.push([
+        Markup.button.callback(T[lang].backBtn, 'mgr_back_to_menu'),
+      ]);
+
+      try {
+        await ctx.editMessageText(message, Markup.inlineKeyboard(buttons));
+      } catch {
+        await ctx.reply(message, Markup.inlineKeyboard(buttons));
+      }
+    });
+
+    // Export handlers
+    bot.action(/^mgr_export_(day|week|month|year)$/, async (ctx) => {
+      const period = ctx.match[1] as 'day' | 'week' | 'month' | 'year';
+      const tg = ctx.from;
+      const lang = await this.getLang(ctx);
+      const manager = await this.managers.findByTelegramId(tg.id);
+      if (!manager || !manager.is_active)
+        return ctx.answerCbQuery(T[lang].noPermission);
+
+      try {
+        await ctx.answerCbQuery('📊 Excel fayl tayyorlanmoqda...');
+
+        const workers = await this.workers.listVerified();
+        const workerIds = workers.map((w) => w.id);
+        const attendances = await this.attendance.getAttendanceByPeriod(
+          workerIds,
+          period,
+        );
+
+        // Group attendances by worker
+        const data = workers.map((worker) => ({
+          worker,
+          attendances: attendances.filter((a) => a.worker_id === worker.id),
+        }));
+
+        const buffer = this.excel.generateExcelBuffer(data, period);
+        const fileName = this.excel.getFileName(period);
+
+        await ctx.replyWithDocument({
+          source: buffer,
+          filename: fileName,
+        });
+      } catch (e) {
+        this.logger.error('Export failed', e);
+        await ctx.answerCbQuery('❌ Xatolik yuz berdi', { show_alert: true });
+      }
+    });
+
+    // Unverified managers (Super Admin only)
+    bot.action('mgr_managers_pending', async (ctx) => {
+      const tg = ctx.from;
+      const lang = await this.getLang(ctx);
+      const isSuperAdmin = await this.managers.isSuperAdmin(tg.id);
+      if (!isSuperAdmin) return ctx.answerCbQuery(T[lang].noPermission);
+
+      try {
+        await ctx.editMessageReplyMarkup(undefined);
+      } catch {}
+      const list = await this.managers.listUnverified();
+      if (!list.length)
+        return ctx.editMessageText(
+          T[lang].unverifiedManagersEmpty,
+          this.backToMenuKeyboard(lang),
+        );
+
+      let message = `${T[lang].superAdminUnverifiedManagersBtn}:\n\n`;
+      for (const m of list.slice(0, 10)) {
+        message += `👨‍💼 ${m.fullname} (tg:${m.telegram_id})\n`;
+      }
+
+      const buttons = [];
+      for (const m of list.slice(0, 5)) {
+        buttons.push([
+          Markup.button.callback(`✅ ${m.fullname}`, `verify_manager_${m.id}`),
+        ]);
+      }
+      buttons.push([
+        Markup.button.callback(T[lang].backBtn, 'mgr_back_to_menu'),
+      ]);
+
+      await ctx.editMessageText(message, Markup.inlineKeyboard(buttons));
+    });
+
+    bot.action(/^verify_manager_(\d+)$/, async (ctx) => {
+      const id = Number(ctx.match[1]);
+      const tg = ctx.from;
+      const lang = await this.getLang(ctx);
+      const isSuperAdmin = await this.managers.isSuperAdmin(tg.id);
+      if (!isSuperAdmin) return ctx.answerCbQuery(T[lang].noPermission);
+
+      const verified = await this.managers.verifyManager(id);
+      if (!verified) return ctx.answerCbQuery(T[lang].notFound);
+
+      await ctx.reply(T[lang].managerVerifiedMsg(verified.fullname));
+
+      // Notify manager about approval
+      try {
+        const mLang = (verified.language as Lang) || 'uz';
+        await this.bot.telegram.sendMessage(
+          verified.telegram_id,
+          mLang === 'ru'
+            ? 'Ваш профиль менеджера подтверждён ✅ Используйте /manager для меню.'
+            : "Manager profilingiz tasdiqlandi ✅ /manager buyrug'i bilan menyudan foydalaning.",
+        );
+      } catch (e) {
+        this.logger.warn(
+          `Could not notify verified manager ${verified.id}: ${String(e)}`,
+        );
+      }
+    });
+
+    // Approve/Reject managers from inline notification
+    bot.action(/^approve_manager_(\d+)$/, async (ctx) => {
+      const telegramId = Number(ctx.match[1]);
+      const tg = ctx.from;
+      const lang = await this.getLang(ctx);
+      const isSuperAdmin = await this.managers.isSuperAdmin(tg.id);
+      if (!isSuperAdmin) return ctx.answerCbQuery(T[lang].noPermission);
+
+      const manager = await this.managers.findByTelegramId(telegramId);
+      if (!manager) return ctx.answerCbQuery(T[lang].notFound);
+
+      const verified = await this.managers.verifyManager(manager.id);
+      try {
+        await ctx.editMessageReplyMarkup(undefined);
+      } catch {}
+      await ctx.reply(T[lang].managerVerifiedMsg(verified.fullname));
+
+      // Notify manager
+      try {
+        const mLang = (verified.language as Lang) || 'uz';
+        await this.bot.telegram.sendMessage(
+          verified.telegram_id,
+          mLang === 'ru'
+            ? 'Ваш профиль менеджера подтверждён ✅ Используйте /manager для меню.'
+            : "Manager profilingiz tasdiqlandi ✅ /manager buyrug'i bilan menyudan foydalaning.",
+        );
+      } catch (e) {
+        this.logger.warn(
+          `Could not notify verified manager ${verified.id}: ${String(e)}`,
+        );
+      }
+    });
+
+    bot.action(/^reject_manager_(\d+)$/, async (ctx) => {
+      const telegramId = Number(ctx.match[1]);
+      const tg = ctx.from;
+      const lang = await this.getLang(ctx);
+      const isSuperAdmin = await this.managers.isSuperAdmin(tg.id);
+      if (!isSuperAdmin) return ctx.answerCbQuery(T[lang].noPermission);
+
+      try {
+        await ctx.editMessageReplyMarkup(undefined);
+      } catch {}
+      await ctx.reply(
+        lang === 'ru'
+          ? `Заявка менеджера #${telegramId} отклонена ❌`
+          : `Manager #${telegramId} arizasi rad etildi ❌`,
+      );
+
+      // Notify manager of rejection
+      try {
+        const manager = await this.managers.findByTelegramId(telegramId);
+        if (manager) {
+          const mLang = (manager.language as Lang) || 'uz';
+          await this.bot.telegram.sendMessage(
+            manager.telegram_id,
+            mLang === 'ru'
+              ? 'Ваш профиль менеджера отклонён ❌'
+              : 'Manager profilingiz rad etildi ❌',
+          );
+        }
+      } catch (e) {
+        this.logger.warn(
+          `Could not notify rejected manager ${telegramId}: ${String(e)}`,
         );
       }
     });

@@ -19,13 +19,15 @@ const T = {
     roleManager: '👨‍💼 Menejer',
     workerCreated: 'Ishchi profili yaratildi. Menejer tasdigʻini kuting.',
     managerCreated:
-      'Menejer profili yaratildi. /activate buyrugʻi bilan faollashtiring.',
+      'Menejer profili yaratildi. Super admin tasdiqlashi kutilmoqda.',
     saved: 'Saqlandi ✅',
     enterFullname: 'Iltimos, toʼliq ismingizni kiriting:',
     invalidFullname: 'Ism juda qisqa. Iltimos, toʼliq ismingizni kiriting.',
     greetingVerified: (name: string) => `Salom, ${name}. Asosiy menyu:`,
     greetingPending: (name: string) =>
       `Salom, ${name}. Roʼyxatdan oʼtish uchun menejer tasdiqlashi kerak.`,
+    greetingManagerPending: (name: string) =>
+      `Salom, ${name}. Roʼyxatdan oʼtish uchun super admin tasdiqlashi kerak.`,
     btnCheckIn: 'Kelish (Check-in) ✅',
     btnCheckOut: 'Ketish (Check-out) 🕘',
     btnRequestLeave: 'Javob soʼrash 📝',
@@ -76,6 +78,7 @@ const T = {
     managerMenuHint: 'Manager menyusi uchun /manager buyrugʼidan foydalaning.',
     managerPendingBtn: 'Kutilayotgan soʼrovlar 🔔',
     managerUnverifiedBtn: 'Tasdiqlanmagan ishchilar 👤',
+    viewWorkersBtn: 'Ishchilarni koʼrish 👥',
     notFound: 'Topilmadi',
     commentLabel: 'Izoh',
     approvedByManager: 'Profilingiz menejer tomonidan tasdiqlandi ✅',
@@ -89,13 +92,15 @@ const T = {
     roleManager: '👨‍💼 Менеджер',
     workerCreated:
       'Профиль работника создан. Ожидайте подтверждения менеджера.',
-    managerCreated: 'Профиль менеджера создан. Активируйте через /activate.',
+    managerCreated: 'Профиль менеджера создан. Ожидается подтверждение супер админа.',
     saved: 'Сохранено ✅',
     enterFullname: 'Пожалуйста, введите ваше полное имя:',
     invalidFullname: 'Слишком короткое имя. Введите полное имя.',
     greetingVerified: (name: string) => `Здравствуйте, ${name}. Главное меню:`,
     greetingPending: (name: string) =>
       `Здравствуйте, ${name}. Для завершения регистрации менеджер должен подтвердить вас.`,
+    greetingManagerPending: (name: string) =>
+      `Здравствуйте, ${name}. Для завершения регистрации супер админ должен подтвердить вас.`,
     btnCheckIn: 'Пришёл (Check-in) ✅',
     btnCheckOut: 'Ушёл (Check-out) 🕘',
     btnRequestLeave: 'Запросить отгул 📝',
@@ -144,6 +149,7 @@ const T = {
     managerMenuHint: 'Для меню менеджера используйте команду /manager.',
     managerPendingBtn: 'Ожидающие запросы 🔔',
     managerUnverifiedBtn: 'Неподтверждённые работники 👤',
+    viewWorkersBtn: 'Просмотр работников 👥',
     notFound: 'Не найдено',
     commentLabel: 'Комментарий',
     approvedByManager: 'Ваш профиль подтверждён менеджером ✅',
@@ -246,6 +252,50 @@ export class ScenarioFrontendService implements OnModuleInit {
     return dt;
   }
 
+  private async showManagerMenuIfActive(ctx: Ctx, manager: any, lang: Lang) {
+    if (!manager.is_active) {
+      await ctx.reply(
+        T[lang].greetingManagerPending(manager.fullname),
+        this.mainMenu(false, lang) // Show waiting buttons
+      );
+      return;
+    }
+
+    const tr = T[lang];
+    const isSuperAdmin = await this.managers.isSuperAdmin(manager.telegram_id);
+    const menuButtons: any[] = [];
+
+    // Pending requests
+    menuButtons.push([
+      Markup.button.callback(tr.managerPendingBtn, 'mgr_pending'),
+    ]);
+
+    // Unverified workers  
+    menuButtons.push([
+      Markup.button.callback(tr.managerUnverifiedBtn, 'mgr_workers_pending'),
+    ]);
+
+    // Super admin only: unverified managers
+    if (isSuperAdmin) {
+      menuButtons.push([
+        Markup.button.callback(
+          lang === 'ru' ? 'Неподтверждённые менеджеры 👨‍💼' : 'Tasdiqlanmagan managerlar 👨‍💼',
+          'mgr_managers_pending'
+        ),
+      ]);
+    }
+
+    // View workers
+    menuButtons.push([
+      Markup.button.callback(tr.viewWorkersBtn, 'mgr_view_workers'),
+    ]);
+
+    const title = isSuperAdmin 
+      ? (lang === 'ru' ? 'Меню супер админа:' : 'Super Admin menyusi:')
+      : (lang === 'ru' ? 'Меню менеджера:' : 'Manager menyusi:');
+    await ctx.reply(title, Markup.inlineKeyboard(menuButtons));
+  }
+
   // manager menu is handled in dashboard service
 
   private registerHandlers() {
@@ -275,9 +325,9 @@ export class ScenarioFrontendService implements OnModuleInit {
               : tr.greetingPending(existingWorker.fullname),
             this.mainMenu(!!existingWorker.is_verified, lang),
           );
-        } else {
-          // forward to dashboard commands hint
-          await ctx.reply(T[lang].managerMenuHint);
+        } else if (existingManager) {
+          // Show manager menu automatically if active
+          await this.showManagerMenuIfActive(ctx, existingManager, lang);
         }
         return;
       }
@@ -451,9 +501,21 @@ export class ScenarioFrontendService implements OnModuleInit {
             this.mainMenu(worker.is_verified, lang),
           );
         } else {
-          await this.managers.createIfNotExists(tgId, name, lang);
+          const manager = await this.managers.createIfNotExists(tgId, name, lang);
           await ctx.reply(T[lang].managerCreated);
-          await ctx.reply(T[lang].managerMenuHint);
+          // Notify super admins about new manager
+          await this.notifySuperAdminsNewManager({
+            telegram_id: tgId,
+            fullname: name,
+            language: lang,
+          });
+          // Show waiting message for manager
+          await ctx.reply(
+            manager.is_active
+              ? T[lang].greetingVerified(manager.fullname)
+              : T[lang].greetingManagerPending(manager.fullname),
+            this.mainMenu(false, lang), // Show waiting buttons for unverified manager
+          );
         }
         ctx.session.step = undefined;
         ctx.session.pending_role = undefined;
@@ -632,6 +694,43 @@ export class ScenarioFrontendService implements OnModuleInit {
       );
     } catch (e: any) {
       this.logger.error('notifyManagersNewWorker error', e?.message || e);
+    }
+  }
+
+  private async notifySuperAdminsNewManager(
+    manager: { telegram_id: number; fullname: string; language: 'uz' | 'ru' },
+  ) {
+    try {
+      const superAdmins = await this.managers.listSuperAdmins();
+      await Promise.all(
+        superAdmins.map(async (admin) => {
+          const text =
+            admin.language === 'ru'
+              ? `Новый менеджер: ${manager.fullname} (tg:${manager.telegram_id}). Требуется подтверждение.`
+              : `Yangi menejer: ${manager.fullname} (tg:${manager.telegram_id}). Tasdiqlash kerak.`;
+          const kb = Markup.inlineKeyboard([
+            [
+              Markup.button.callback(
+                admin.language === 'ru' ? 'Подтвердить 👌' : 'Tasdiqlash 👌',
+                `approve_manager_${manager.telegram_id}`,
+              ),
+              Markup.button.callback(
+                admin.language === 'ru' ? 'Отклонить ❌' : 'Rad etish ❌',
+                `reject_manager_${manager.telegram_id}`,
+              ),
+            ],
+          ]);
+          await this.bot.telegram
+            .sendMessage(admin.telegram_id, text, kb)
+            .catch((e) =>
+              this.logger.warn(
+                `Notify new manager fail to ${admin.telegram_id}: ${e.message}`,
+              ),
+            );
+        }),
+      );
+    } catch (e: any) {
+      this.logger.error('notifySuperAdminsNewManager error', e?.message || e);
     }
   }
 

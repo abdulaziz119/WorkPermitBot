@@ -2,6 +2,7 @@ import { Inject, Injectable, NotFoundException } from '@nestjs/common';
 import { Repository } from 'typeorm';
 import { MODELS } from '../../../constants/constants';
 import { ManagerEntity } from '../../../entity/managers.entity';
+import { UserRoleEnum } from '../../../utils/enum/user.enum';
 
 @Injectable()
 export class ManagersService {
@@ -26,6 +27,7 @@ export class ManagersService {
       fullname,
       is_active: false,
       language,
+      role: UserRoleEnum.ADMIN, // Default to admin, not super_admin
     });
     return this.managerRepo.save(manager);
   }
@@ -64,6 +66,7 @@ export class ManagersService {
         telegram_id: telegramId,
         fullname,
         is_active: false,
+        role: UserRoleEnum.ADMIN,
       });
       manager = await this.managerRepo.save(manager);
     } else if (fullname && manager.fullname !== fullname) {
@@ -92,6 +95,36 @@ export class ManagersService {
     if (!manager) return null;
     if (manager.is_active) {
       manager.is_active = false;
+      await this.managerRepo.save(manager);
+    }
+    return manager;
+  }
+
+  async listSuperAdmins(): Promise<ManagerEntity[]> {
+    return this.managerRepo.find({
+      where: { role: UserRoleEnum.SUPER_ADMIN, is_active: true },
+    });
+  }
+
+  async listUnverified(): Promise<ManagerEntity[]> {
+    return this.managerRepo.find({
+      where: { is_active: false },
+      order: { created_at: 'DESC' },
+    });
+  }
+
+  async isSuperAdmin(telegramId: number): Promise<boolean> {
+    const manager = await this.findByTelegramId(telegramId);
+    return manager?.role === UserRoleEnum.SUPER_ADMIN && manager?.is_active;
+  }
+
+  async verifyManager(managerId: number): Promise<ManagerEntity | null> {
+    const manager = await this.managerRepo.findOne({
+      where: { id: managerId },
+    });
+    if (!manager) return null;
+    if (!manager.is_active) {
+      manager.is_active = true;
       await this.managerRepo.save(manager);
     }
     return manager;

@@ -72,4 +72,26 @@ export class WorkersService {
       order: { created_at: 'ASC' },
     });
   }
+
+  async listVerifiedPaginated(page = 1, limit = 5): Promise<{
+    workers: WorkerEntity[];
+    total: number;
+    hasNext: boolean;
+    hasPrev: boolean;
+  }> {
+    const offset = (page - 1) * limit;
+    const [workers, total] = await this.repo.findAndCount({
+      where: { is_verified: true },
+      order: { created_at: 'ASC' },
+      skip: offset,
+      take: limit,
+    });
+    
+    return {
+      workers,
+      total,
+      hasNext: offset + limit < total,
+      hasPrev: page > 1,
+    };
+  }
 }
