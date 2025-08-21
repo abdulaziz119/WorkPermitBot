@@ -26,15 +26,17 @@ export class AttendanceService {
     workerId: number,
     today = new Date(),
   ): Promise<AttendanceEntity | null> {
-    const day: Date = startOfDay(today);
-    const yyyy: number = day.getFullYear();
-    const mm: string = String(day.getMonth() + 1).padStart(2, '0');
-    const dd: string = String(day.getDate()).padStart(2, '0');
-    const dateOnly = `${yyyy}-${mm}-${dd}`; // matches date column
+    const from = startOfDay(today);
+    const to = endOfDay(today);
+    // Select the latest record created today for this worker (should be at most one)
     return this.repo
       .createQueryBuilder('a')
       .where('a.worker_id = :workerId', { workerId })
-      .andWhere('a.date = :dateOnly', { dateOnly })
+      .andWhere('a.created_at BETWEEN :from AND :to', {
+        from,
+        to,
+      })
+      .orderBy('a.created_at', 'DESC')
       .getOne();
   }
 
