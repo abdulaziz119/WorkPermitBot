@@ -28,11 +28,19 @@ const T = {
     btnCheckOut: 'Ketish (Check-out) 🕘',
     btnRequestLeave: 'Javob soʼrash 📝',
     btnMyRequests: 'Mening soʼrovlarim 📄',
-  backBtn: 'Qaytish ◀',
+    backBtn: 'Qaytish ◀',
     btnWaiting: 'Tasdiqlashni kutish ⏳',
+    statusPending: 'Kutilmoqda',
+    statusApproved: 'Ruxsat',
+    statusRejected: 'Javob berilmadi',
     notVerified: 'Siz hali tasdiqlanmagansiz',
     checkInDone: 'Check-in qayd etildi ✅',
     checkOutDone: 'Check-out qayd etildi 🕘',
+    enterDate:
+      'Iltimos, ruxsat olinadigan sanani kiriting (format: DD.MM yoki DD-MM). Masalan: 22.08',
+    invalidDate:
+      'Notoʼgʼri sana. Iltimos, DD.MM formatida kiriting. Masalan: 05.09',
+    enterReasonShort: 'Sababni yozing (masalan: oilaviy ishlar).',
     enterReason:
       'Iltimos, javob sababi va sanasini kiriting. Masalan: "22-avgust – oilaviy ishlar"',
     requestAccepted: (id: number) =>
@@ -85,11 +93,18 @@ const T = {
     btnCheckOut: 'Ушёл (Check-out) 🕘',
     btnRequestLeave: 'Запросить отгул 📝',
     btnMyRequests: 'Мои запросы 📄',
-  backBtn: 'Назад ◀',
+    backBtn: 'Назад ◀',
     btnWaiting: 'Ожидается подтверждение ⏳',
+    statusPending: 'В ожидании',
+    statusApproved: 'Одобрено',
+    statusRejected: 'Не одобрено',
     notVerified: 'Вы ещё не подтверждены',
     checkInDone: 'Check-in записан ✅',
     checkOutDone: 'Check-out записан 🕘',
+    enterDate:
+      'Пожалуйста, введите дату отгула (формат: ДД.ММ или ДД-ММ). Например: 22.08',
+    invalidDate: 'Неверная дата. Введите в формате ДД.ММ. Например: 05.09',
+    enterReasonShort: 'Введите причину (например: семейные дела).',
     enterReason:
       'Пожалуйста, введите причину и дату. Например: "22-августа – семейные дела"',
     requestAccepted: (id: number) =>
@@ -179,6 +194,40 @@ export class ScenarioFrontendService implements OnModuleInit {
     return Markup.inlineKeyboard([
       [Markup.button.callback(tr.backBtn, 'back_to_menu')],
     ]);
+  }
+
+  private statusLabel(lang: Lang, status: string): string {
+    if (lang === 'ru') {
+      if (status === 'pending') return T.ru.statusPending;
+      if (status === 'approved') return T.ru.statusApproved;
+      if (status === 'rejected') return T.ru.statusRejected;
+      return status;
+    }
+    if (status === 'pending') return T.uz.statusPending;
+    if (status === 'approved') return T.uz.statusApproved;
+    if (status === 'rejected') return T.uz.statusRejected;
+    return status;
+  }
+
+  private parseDayMonth(input: string): Date | null {
+    const cleaned = (input || '').trim();
+    const m = cleaned.match(/^(\d{1,2})[./-](\d{1,2})(?:[./-](\d{2,4}))?$/);
+    if (!m) return null;
+    const d = Number(m[1]);
+    const mo = Number(m[2]);
+    const now = new Date();
+    const y = m[3]
+      ? Number(m[3].length === 2 ? '20' + m[3] : m[3])
+      : now.getFullYear();
+    if (mo < 1 || mo > 12 || d < 1 || d > 31) return null;
+    const dt = new Date(Date.UTC(y, mo - 1, d));
+    if (
+      dt.getUTCFullYear() !== y ||
+      dt.getUTCMonth() !== mo - 1 ||
+      dt.getUTCDate() !== d
+    )
+      return null;
+    return dt;
   }
 
   // manager menu is handled in dashboard service
@@ -338,7 +387,7 @@ export class ScenarioFrontendService implements OnModuleInit {
       await ctx.reply(T[lang].checkOutDone, this.mainMenu(true, lang));
     });
 
-    // Worker: create request
+    // Worker: create request (two-step: date -> reason)
     bot.action('request_leave', async (ctx) => {
       const tg = ctx.from;
       const lang = await this.getLang(ctx);
@@ -346,12 +395,56 @@ export class ScenarioFrontendService implements OnModuleInit {
       if (!worker || !worker.is_verified)
         return ctx.answerCbQuery(T[lang].notVerified);
       ctx.session ??= {};
-      ctx.session['awaiting_reason'] = true;
-      await ctx.reply(T[lang].enterReason);
+      ctx.session['req_flow'] = { step: 'await_date' };
+      await ctx.reply(T[lang].enterDate, this.backKeyboard(lang));
     });
 
     bot.on('text', async (ctx, next) => {
-      // Collect reason for worker request
+      // New flow: ask date then reason
+      const flow = ctx.session?.['req_flow'];
+      if (flow?.step === 'await_date') {
+        const lang = await this.getLang(ctx);
+        const dt = this.parseDayMonth(ctx.message.text);
+        if (!dt) {
+          await ctx.reply(T[lang].invalidDate, this.backKeyboard(lang));
+          return; // keep waiting for valid date
+        }
+        ctx.session['req_flow'] = {
+          step: 'await_reason',
+          approvedDate: dt.toISOString(),
+        };
+        await ctx.reply(T[lang].enterReasonShort, this.backKeyboard(lang));
+        return;
+      }
+      if (flow?.step === 'await_reason') {
+        const tg = ctx.from;
+        const worker = await this.workers.findByTelegramId(tg.id);
+        const lang = await this.getLang(ctx);
+        if (!worker || !worker.is_verified) {
+          ctx.session['req_flow'] = undefined;
+          return ctx.reply(T[lang].notVerified);
+        }
+        const reason = ctx.message.text.trim();
+        const approvedDate = flow.approvedDate
+          ? new Date(flow.approvedDate)
+          : undefined;
+        const req = await this.requests.createRequest(
+          worker.id,
+          reason,
+          approvedDate,
+        );
+        ctx.session['req_flow'] = undefined;
+        await ctx.reply(
+          T[lang].requestAccepted(req.id),
+          this.mainMenu(true, lang),
+        );
+        await this.notifyManagersByLang(
+          T.uz.newRequestNotify(req.id, worker.id, reason),
+          T.ru.newRequestNotify(req.id, worker.id, reason),
+        );
+        return; // stop here
+      }
+      // Legacy single-step fallback
       if (ctx.session?.['awaiting_reason']) {
         const tg = ctx.from;
         const worker = await this.workers.findByTelegramId(tg.id);
@@ -371,7 +464,7 @@ export class ScenarioFrontendService implements OnModuleInit {
           T.uz.newRequestNotify(req.id, worker.id, reason),
           T.ru.newRequestNotify(req.id, worker.id, reason),
         );
-        return; // stop here, don't pass to next text handlers
+        return;
       }
       return next();
     });
@@ -403,6 +496,11 @@ export class ScenarioFrontendService implements OnModuleInit {
     bot.action('back_to_menu', async (ctx) => {
       const lang = await this.getLang(ctx);
       const tgId = Number(ctx.from?.id);
+      // Clear any pending flows (date/reason etc.)
+      if (ctx.session) {
+        ctx.session['req_flow'] = undefined;
+        ctx.session['awaiting_reason'] = false;
+      }
       const worker = await this.workers.findByTelegramId(tgId);
       const isVerified = !!worker?.is_verified;
       const text = worker
@@ -417,22 +515,6 @@ export class ScenarioFrontendService implements OnModuleInit {
       }
     });
     // Manager flows moved to ScenarioDashboardService
-  }
-
-  // Map request status enum values to localized labels for UX
-  private statusLabel(lang: Lang, status: string): string {
-    const mapUz: Record<string, string> = {
-      pending: 'Kutilmoqda',
-      approved: 'Ruxsat berildi',
-      rejected: 'Rad etildi',
-    };
-    const mapRu: Record<string, string> = {
-      pending: 'В ожидании',
-      approved: 'Одобрено',
-      rejected: 'Отклонено',
-    };
-    const table = lang === 'ru' ? mapRu : mapUz;
-    return table[status] ?? status;
   }
 
   private async notifyManagersByLang(messageUz: string, messageRu: string) {

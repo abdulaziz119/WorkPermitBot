@@ -8,6 +8,7 @@ import { BaseEntity, cascadeUpdateRelationOptions } from './base.entity';
 export class AttendanceEntity extends BaseEntity {
   @Column({ type: 'integer' })
   worker_id: number;
+
   @ManyToOne(() => WorkerEntity, cascadeUpdateRelationOptions)
   @JoinColumn({ name: 'worker_id' })
   worker: WorkerEntity;

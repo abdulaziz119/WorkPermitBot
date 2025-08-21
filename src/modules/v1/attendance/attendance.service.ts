@@ -26,10 +26,10 @@ export class AttendanceService {
     workerId: number,
     today = new Date(),
   ): Promise<AttendanceEntity> {
-    const day = startOfDay(today);
-    const yyyy = day.getFullYear();
-    const mm = String(day.getMonth() + 1).padStart(2, '0');
-    const dd = String(day.getDate()).padStart(2, '0');
+    const day: Date = startOfDay(today);
+    const yyyy: number = day.getFullYear();
+    const mm: string = String(day.getMonth() + 1).padStart(2, '0');
+    const dd: string = String(day.getDate()).padStart(2, '0');
     const dateOnly = `${yyyy}-${mm}-${dd}`; // matches date column
     return this.repo
       .createQueryBuilder('a')
@@ -42,9 +42,9 @@ export class AttendanceService {
     const now = new Date();
     let today: AttendanceEntity | null = await this.getToday(workerId, now);
     if (!today) {
-      const yyyy = now.getFullYear();
-      const mm = String(now.getMonth() + 1).padStart(2, '0');
-      const dd = String(now.getDate()).padStart(2, '0');
+      const yyyy: number = now.getFullYear();
+      const mm: string = String(now.getMonth() + 1).padStart(2, '0');
+      const dd: string = String(now.getDate()).padStart(2, '0');
       today = this.repo.create({
         worker_id: workerId,
         date: `${yyyy}-${mm}-${dd}`,
@@ -60,9 +60,9 @@ export class AttendanceService {
     const now = new Date();
     let today: AttendanceEntity | null = await this.getToday(workerId, now);
     if (!today) {
-      const yyyy = now.getFullYear();
-      const mm = String(now.getMonth() + 1).padStart(2, '0');
-      const dd = String(now.getDate()).padStart(2, '0');
+      const yyyy: number = now.getFullYear();
+      const mm: string = String(now.getMonth() + 1).padStart(2, '0');
+      const dd: string = String(now.getDate()).padStart(2, '0');
       today = this.repo.create({
         worker_id: workerId,
         date: `${yyyy}-${mm}-${dd}`,
@@ -80,13 +80,13 @@ export class AttendanceService {
     payload: { check_in?: Date; check_out?: Date },
     onDate = new Date(),
   ): Promise<AttendanceEntity> {
-    const day = startOfDay(onDate);
-    const yyyy = day.getFullYear();
-    const mm = String(day.getMonth() + 1).padStart(2, '0');
-    const dd = String(day.getDate()).padStart(2, '0');
+    const day: Date = startOfDay(onDate);
+    const yyyy: number = day.getFullYear();
+    const mm: string = String(day.getMonth() + 1).padStart(2, '0');
+    const dd: string = String(day.getDate()).padStart(2, '0');
     const dateOnly = `${yyyy}-${mm}-${dd}`;
 
-    let rec = await this.getToday(workerId, day);
+    let rec: AttendanceEntity = await this.getToday(workerId, day);
     if (!rec) {
       rec = this.repo.create({ worker_id: workerId, date: dateOnly });
     }
