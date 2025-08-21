@@ -491,17 +491,24 @@ export class ScenarioDashboardService implements OnModuleInit {
         return ctx.editMessageText(T[lang].verifiedWorkersEmpty, this.backToMenuKeyboard(lang));
       }
 
-      let message = `${T[lang].viewWorkersBtn} (${page}/${Math.ceil(result.total / 5)}):\n\n`;
+      let message = `${T[lang].viewWorkersBtn} (${page}/${Math.ceil(result.total / 5)}):\n`;
 
+      const buttons: any[] = [];
+
+      // Worker buttons with attendance status
       for (const worker of result.workers) {
         const todayAttendance = await this.attendance.getToday(worker.id);
         const status = todayAttendance?.check_in
           ? T[lang].attendancePresent
           : T[lang].attendanceAbsent;
-        message += `👤 ${worker.fullname}\n${T[lang].attendanceToday}: ${status}\n\n`;
+        
+        buttons.push([
+          Markup.button.callback(
+            `${status} ${worker.fullname}`,
+            `mgr_worker_${worker.id}`
+          ),
+        ]);
       }
-
-      const buttons: any[] = [];
 
       // Pagination buttons
       const navButtons = [];
@@ -525,20 +532,50 @@ export class ScenarioDashboardService implements OnModuleInit {
         buttons.push(navButtons);
       }
 
-      // Export buttons
-      buttons.push([
-        Markup.button.callback(T[lang].exportDaily, 'mgr_export_day'),
-        Markup.button.callback(T[lang].exportWeekly, 'mgr_export_week'),
-      ]);
-      buttons.push([
-        Markup.button.callback(T[lang].exportMonthly, 'mgr_export_month'),
-        Markup.button.callback(T[lang].exportYearly, 'mgr_export_year'),
-      ]);
-
       // Back button
       buttons.push([
         Markup.button.callback(T[lang].backBtn, 'mgr_back_to_menu'),
       ]);
+
+      try {
+        await ctx.editMessageText(message, Markup.inlineKeyboard(buttons));
+      } catch {
+        await ctx.reply(message, Markup.inlineKeyboard(buttons));
+      }
+    });
+
+    // Individual worker view with export options
+    bot.action(/^mgr_worker_(\d+)$/, async (ctx) => {
+      const workerId = Number(ctx.match[1]);
+      const tg = ctx.from;
+      const lang = await this.getLang(ctx);
+      const manager = await this.managers.findByTelegramId(tg.id);
+      if (!manager || !manager.is_active)
+        return ctx.answerCbQuery(T[lang].noPermission);
+
+      const worker = await this.workers.findById(workerId);
+      if (!worker) return ctx.answerCbQuery(T[lang].notFound);
+
+      const todayAttendance = await this.attendance.getToday(worker.id);
+      const status = todayAttendance?.check_in
+        ? T[lang].attendancePresent
+        : T[lang].attendanceAbsent;
+
+      const message = `👤 ${worker.fullname}\n${T[lang].attendanceToday}: ${status}\n\nDavomat hisobotini yuklab olish:`;
+
+      const buttons = [
+        [
+          Markup.button.callback(T[lang].exportDaily, `mgr_export_worker_day_${workerId}`),
+          Markup.button.callback(T[lang].exportWeekly, `mgr_export_worker_week_${workerId}`),
+        ],
+        [
+          Markup.button.callback(T[lang].exportMonthly, `mgr_export_worker_month_${workerId}`),
+          Markup.button.callback(T[lang].exportYearly, `mgr_export_worker_year_${workerId}`),
+        ],
+        [
+          Markup.button.callback(T[lang].backBtn, 'mgr_view_workers'),
+        ],
+      ];
 
       try {
         await ctx.editMessageText(message, Markup.inlineKeyboard(buttons));
@@ -581,6 +618,46 @@ export class ScenarioDashboardService implements OnModuleInit {
         });
       } catch (e) {
         this.logger.error('Export failed', e);
+        await ctx.answerCbQuery('❌ Xatolik yuz berdi', { show_alert: true });
+      }
+    });
+
+    // Individual worker export handlers
+    bot.action(/^mgr_export_worker_(day|week|month|year)_(\d+)$/, async (ctx) => {
+      const period = ctx.match[1] as 'day' | 'week' | 'month' | 'year';
+      const workerId = Number(ctx.match[2]);
+      const tg = ctx.from;
+      const lang = await this.getLang(ctx);
+      const manager = await this.managers.findByTelegramId(tg.id);
+      if (!manager || !manager.is_active)
+        return ctx.answerCbQuery(T[lang].noPermission);
+
+      try {
+        await ctx.answerCbQuery('📊 Excel fayl tayyorlanmoqda...');
+
+        const worker = await this.workers.findById(workerId);
+        if (!worker) return ctx.answerCbQuery(T[lang].notFound);
+
+        const attendances = await this.attendance.getAttendanceByPeriod(
+          [workerId],
+          period,
+        );
+
+        // Data for single worker
+        const data = [{
+          worker,
+          attendances: attendances.filter((a) => a.worker_id === workerId),
+        }];
+
+        const buffer = this.excel.generateExcelBuffer(data, period);
+        const fileName = this.excel.getFileName(period, worker.fullname);
+
+        await ctx.replyWithDocument({
+          source: buffer,
+          filename: fileName,
+        });
+      } catch (e) {
+        this.logger.error('Individual worker export failed', e);
         await ctx.answerCbQuery('❌ Xatolik yuz berdi', { show_alert: true });
       }
     });

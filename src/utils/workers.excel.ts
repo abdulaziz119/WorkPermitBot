@@ -44,9 +44,10 @@ export class WorkersExcelService {
     return Buffer.from(lines.join('\n'), 'utf-8');
   }
 
-  getFileName(period: string): string {
+  getFileName(period: string, workerName?: string): string {
     const now = new Date();
     const dateStr = now.toISOString().split('T')[0];
-    return `attendance_${period}_${dateStr}.csv`;
+    const prefix = workerName ? `${workerName.replace(/\s+/g, '_')}_` : '';
+    return `${prefix}attendance_${period}_${dateStr}.csv`;
   }
 }
