@@ -234,14 +234,14 @@ export class ScenarioFrontendService implements OnModuleInit {
 
   private statusLabel(lang: Lang, status: string): string {
     if (lang === 'ru') {
-      if (status === 'pending') return T.ru.statusPending;
-      if (status === 'approved') return T.ru.statusApproved;
-      if (status === 'rejected') return T.ru.statusRejected;
+      if (status === 'pending') return `⏳ ${T.ru.statusPending}`;
+      if (status === 'approved') return `✅ ${T.ru.statusApproved}`;
+      if (status === 'rejected') return `❌ ${T.ru.statusRejected}`;
       return status;
     }
-    if (status === 'pending') return T.uz.statusPending;
-    if (status === 'approved') return T.uz.statusApproved;
-    if (status === 'rejected') return T.uz.statusRejected;
+    if (status === 'pending') return `⏳ ${T.uz.statusPending}`;
+    if (status === 'approved') return `✅ ${T.uz.statusApproved}`;
+    if (status === 'rejected') return `❌ ${T.uz.statusRejected}`;
     return status;
   }
 
@@ -616,13 +616,30 @@ export class ScenarioFrontendService implements OnModuleInit {
       if (!worker) return ctx.answerCbQuery(T[lang].notFound);
       const list = await this.requests.listByWorker(worker.id);
       if (!list.length)
-        return this.replyFresh(ctx, T[lang].noRequests, this.backKeyboard(lang));
+        return this.replyFresh(
+          ctx,
+          T[lang].noRequests,
+          this.backKeyboard(lang),
+        );
       const lines = list
         .slice(0, 10)
-        .map(
-          (r) =>
-            `#${r.id} • ${this.statusLabel(lang, String(r.status))} • ${r.reason}${r.manager_comment ? `\n${T[lang].commentLabel}: ${r.manager_comment}` : ''}`,
-        )
+        .map((r) => {
+          const statusText = this.statusLabel(lang, String(r.status));
+          const dateText = r.approved_date
+            ? (() => {
+                const d = new Date(r.approved_date);
+                const dd = String(d.getDate()).padStart(2, '0');
+                const mm = String(d.getMonth() + 1).padStart(2, '0');
+                return `📅 ${dd}.${mm}`;
+              })()
+            : '';
+          const reasonText = `📝 ${r.reason}`;
+          const commentText = r.manager_comment
+            ? `\n${T[lang].commentLabel}: ${r.manager_comment}`
+            : '';
+
+          return `#${r.id} • ${statusText}${dateText ? `\n${dateText}` : ''}\n${reasonText}${commentText}`;
+        })
         .join('\n\n');
       await this.replyFresh(ctx, lines, this.backKeyboard(lang));
     });
@@ -645,7 +662,7 @@ export class ScenarioFrontendService implements OnModuleInit {
           ? T[lang].greetingVerified(worker.fullname)
           : T[lang].greetingPending(worker.fullname)
         : T[lang].notFound;
-  await this.replyFresh(ctx, text, this.mainMenu(isVerified, lang));
+      await this.replyFresh(ctx, text, this.mainMenu(isVerified, lang));
     });
     // Manager flows moved to ScenarioDashboardService
   }
