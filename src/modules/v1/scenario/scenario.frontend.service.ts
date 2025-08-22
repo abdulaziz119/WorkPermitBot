@@ -570,10 +570,7 @@ export class ScenarioFrontendService implements OnModuleInit {
           T[lang].requestAccepted(req.id),
           this.mainMenu(true, lang),
         );
-        await this.notifyManagersByLang(
-          T.uz.newRequestNotify(req.id, worker.id, reason),
-          T.ru.newRequestNotify(req.id, worker.id, reason),
-        );
+        await this.notifyManagersNewRequest(req.id, worker.id, reason);
         return; // stop here
       }
       // Legacy single-step fallback
@@ -592,10 +589,7 @@ export class ScenarioFrontendService implements OnModuleInit {
           T[lang].requestAccepted(req.id),
           this.mainMenu(true, lang),
         );
-        await this.notifyManagersByLang(
-          T.uz.newRequestNotify(req.id, worker.id, reason),
-          T.ru.newRequestNotify(req.id, worker.id, reason),
-        );
+        await this.notifyManagersNewRequest(req.id, worker.id, reason);
         return;
       }
       return next();
@@ -676,8 +670,18 @@ export class ScenarioFrontendService implements OnModuleInit {
   }) {
     try {
       const managers = await this.managers.listActive();
+      
+      // Faqat admin roli bilan managerlarni filter qilish
+      const adminManagers = [];
+      for (const manager of managers) {
+        const isAdminManager = await this.managers.isAdmin(manager.telegram_id);
+        if (isAdminManager) {
+          adminManagers.push(manager);
+        }
+      }
+      
       await Promise.all(
-        managers.map(async (m) => {
+        adminManagers.map(async (m) => {
           const text =
             m.language === 'ru'
               ? `Новый работник: ${worker.fullname} (tg:${worker.telegram_id}). Требуется подтверждение.`
@@ -824,6 +828,40 @@ export class ScenarioFrontendService implements OnModuleInit {
       );
     } catch (e) {
       this.logger.warn('sendCheckOutReminders failed');
+    }
+  }
+
+  // Yangi request haqida managerlarni xabardor qilish tugmalar bilan
+  private async notifyManagersNewRequest(requestId: number, workerId: number, reason: string): Promise<void> {
+    try {
+      const managers = await this.managers.listActive();
+      
+      for (const manager of managers) {
+        const messageText = manager.language === 'ru'
+          ? `Новый запрос #${requestId} • Работник:${workerId} • ${reason}`
+          : `Yangi soʼrov #${requestId} • Worker:${workerId} • ${reason}`;
+
+        const buttons = Markup.inlineKeyboard([
+          [
+            Markup.button.callback(
+              manager.language === 'ru' ? 'Одобрить ✅' : 'Tasdiqlash ✅',
+              `approve_${requestId}`
+            ),
+            Markup.button.callback(
+              manager.language === 'ru' ? 'Отклонить ❌' : 'Rad etish ❌',
+              `reject_${requestId}`
+            ),
+          ],
+        ]);
+
+        await this.bot.telegram
+          .sendMessage(manager.telegram_id, messageText, buttons)
+          .catch((e) =>
+            this.logger.warn(`Notify fail to ${manager.telegram_id}: ${e.message}`)
+          );
+      }
+    } catch (e: any) {
+      this.logger.error('notifyManagersNewRequest error', e?.message || e);
     }
   }
 }

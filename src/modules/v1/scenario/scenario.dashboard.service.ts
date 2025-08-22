@@ -245,8 +245,82 @@ export class ScenarioDashboardService implements OnModuleInit {
       const manager = await this.managers.findByTelegramId(tg.id);
       if (!manager || !manager.is_active)
         return ctx.answerCbQuery(T[lang].noPermission);
+      
       ctx.session ??= {};
       ctx.session['approval_target'] = { action, requestId };
+      
+      // Izoh bilan yoki izohsiz tasdiqlash tugmalari
+      const buttons = Markup.inlineKeyboard([
+        [
+          Markup.button.callback(
+            lang === 'ru' 
+              ? `${action === 'approve' ? 'Подтвердить' : 'Отклонить'} без комментария`
+              : `${action === 'approve' ? 'Tasdiqlash' : 'Rad etish'} izohhsiz`,
+            `${action}_no_comment_${requestId}`
+          ),
+        ],
+        [
+          Markup.button.callback(
+            lang === 'ru' 
+              ? `${action === 'approve' ? 'Подтвердить' : 'Отклонить'} с комментарием`
+              : `${action === 'approve' ? 'Tasdiqlash' : 'Rad etish'} izoh bilan`,
+            `${action}_with_comment_${requestId}`
+          ),
+        ],
+      ]);
+      
+      await ctx.reply(
+        lang === 'ru'
+          ? 'Выберите способ ответа:'
+          : 'Javob berish usulini tanlang:',
+        buttons
+      );
+    });
+
+    // Izohsiz tasdiqlash/rad etish
+    bot.action(/^(approve|reject)_no_comment_(\d+)$/, async (ctx) => {
+      const [, action, idStr] = ctx.match;
+      const requestId = Number(idStr);
+      const tg = ctx.from;
+      const lang = await this.getLang(ctx);
+      const manager = await this.managers.findByTelegramId(tg.id);
+      if (!manager || !manager.is_active)
+        return ctx.answerCbQuery(T[lang].noPermission);
+      
+      const comment = ''; // Bo'sh izoh
+      
+      try {
+        await ctx.editMessageReplyMarkup(undefined);
+      } catch {}
+      
+      if (action === 'approve') {
+        await this.requests.approve(requestId, manager.id, comment);
+        await ctx.reply(T[lang].approvedMsg(requestId));
+      } else {
+        await this.requests.reject(requestId, manager.id, comment);
+        await ctx.reply(T[lang].rejectedMsg(requestId));
+      }
+      
+      ctx.session['approval_target'] = undefined;
+    });
+
+    // Izoh bilan tasdiqlash/rad etish
+    bot.action(/^(approve|reject)_with_comment_(\d+)$/, async (ctx) => {
+      const [, action, idStr] = ctx.match;
+      const requestId = Number(idStr);
+      const tg = ctx.from;
+      const lang = await this.getLang(ctx);
+      const manager = await this.managers.findByTelegramId(tg.id);
+      if (!manager || !manager.is_active)
+        return ctx.answerCbQuery(T[lang].noPermission);
+      
+      ctx.session ??= {};
+      ctx.session['approval_target'] = { action, requestId };
+      
+      try {
+        await ctx.editMessageReplyMarkup(undefined);
+      } catch {}
+      
       await ctx.reply(T[lang].approvalCommentPrompt);
     });
 
@@ -372,8 +446,12 @@ export class ScenarioDashboardService implements OnModuleInit {
       const tg = ctx.from;
       const lang = await this.getLang(ctx);
       const manager = await this.managers.findByTelegramId(tg.id);
-      if (!manager || !manager.is_active)
+      
+      // Faqat admin roli bilan managerlar tasdiqlashi mumkin
+      const isAdminManager = await this.managers.isAdmin(tg.id);
+      if (!manager || !manager.is_active || !isAdminManager)
         return ctx.answerCbQuery(T[lang].noPermission);
+        
       const verified = await this.workers.verifyWorker(id);
       if (!verified) return ctx.answerCbQuery(T[lang].notFound);
       try {
@@ -427,8 +505,12 @@ export class ScenarioDashboardService implements OnModuleInit {
       const tg = ctx.from;
       const lang = await this.getLang(ctx);
       const manager = await this.managers.findByTelegramId(tg.id);
-      if (!manager || !manager.is_active)
+      
+      // Faqat admin roli bilan managerlar rad etishi mumkin
+      const isAdminManager = await this.managers.isAdmin(tg.id);
+      if (!manager || !manager.is_active || !isAdminManager)
         return ctx.answerCbQuery(T[lang].noPermission);
+        
       try {
         await ctx.editMessageReplyMarkup(undefined);
       } catch {}

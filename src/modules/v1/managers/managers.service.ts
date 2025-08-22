@@ -118,6 +118,11 @@ export class ManagersService {
     return manager?.role === UserRoleEnum.SUPER_ADMIN && manager?.is_active;
   }
 
+  async isAdmin(telegramId: number): Promise<boolean> {
+    const manager = await this.findByTelegramId(telegramId);
+    return manager?.role === UserRoleEnum.ADMIN && manager?.is_active;
+  }
+
   async verifyManager(managerId: number): Promise<ManagerEntity | null> {
     const manager = await this.managerRepo.findOne({
       where: { id: managerId },
