@@ -83,7 +83,11 @@ export class RequestsService {
       case 'week':
         const startOfWeek = new Date(now);
         startOfWeek.setDate(now.getDate() - now.getDay());
-        startDate = new Date(startOfWeek.getFullYear(), startOfWeek.getMonth(), startOfWeek.getDate());
+        startDate = new Date(
+          startOfWeek.getFullYear(),
+          startOfWeek.getMonth(),
+          startOfWeek.getDate(),
+        );
         break;
       case 'month':
         startDate = new Date(now.getFullYear(), now.getMonth(), 1);

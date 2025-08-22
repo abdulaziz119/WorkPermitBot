@@ -73,7 +73,10 @@ export class WorkersService {
     });
   }
 
-  async listVerifiedPaginated(page = 1, limit = 5): Promise<{
+  async listVerifiedPaginated(
+    page = 1,
+    limit = 5,
+  ): Promise<{
     workers: WorkerEntity[];
     total: number;
     hasNext: boolean;
@@ -86,7 +89,7 @@ export class WorkersService {
       skip: offset,
       take: limit,
     });
-    
+
     return {
       workers,
       total,

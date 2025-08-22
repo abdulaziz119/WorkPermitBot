@@ -245,35 +245,35 @@ export class ScenarioDashboardService implements OnModuleInit {
       const manager = await this.managers.findByTelegramId(tg.id);
       if (!manager || !manager.is_active)
         return ctx.answerCbQuery(T[lang].noPermission);
-      
+
       ctx.session ??= {};
       ctx.session['approval_target'] = { action, requestId };
-      
+
       // Izoh bilan yoki izohsiz tasdiqlash tugmalari
       const buttons = Markup.inlineKeyboard([
         [
           Markup.button.callback(
-            lang === 'ru' 
+            lang === 'ru'
               ? `${action === 'approve' ? 'Подтвердить' : 'Отклонить'} без комментария`
               : `${action === 'approve' ? 'Tasdiqlash' : 'Rad etish'} izohhsiz`,
-            `${action}_no_comment_${requestId}`
+            `${action}_no_comment_${requestId}`,
           ),
         ],
         [
           Markup.button.callback(
-            lang === 'ru' 
+            lang === 'ru'
               ? `${action === 'approve' ? 'Подтвердить' : 'Отклонить'} с комментарием`
               : `${action === 'approve' ? 'Tasdiqlash' : 'Rad etish'} izoh bilan`,
-            `${action}_with_comment_${requestId}`
+            `${action}_with_comment_${requestId}`,
           ),
         ],
       ]);
-      
+
       await ctx.reply(
         lang === 'ru'
           ? 'Выберите способ ответа:'
           : 'Javob berish usulini tanlang:',
-        buttons
+        buttons,
       );
     });
 
@@ -286,13 +286,13 @@ export class ScenarioDashboardService implements OnModuleInit {
       const manager = await this.managers.findByTelegramId(tg.id);
       if (!manager || !manager.is_active)
         return ctx.answerCbQuery(T[lang].noPermission);
-      
+
       const comment = ''; // Bo'sh izoh
-      
+
       try {
         await ctx.editMessageReplyMarkup(undefined);
       } catch {}
-      
+
       if (action === 'approve') {
         await this.requests.approve(requestId, manager.id, comment);
         await ctx.reply(T[lang].approvedMsg(requestId));
@@ -300,7 +300,7 @@ export class ScenarioDashboardService implements OnModuleInit {
         await this.requests.reject(requestId, manager.id, comment);
         await ctx.reply(T[lang].rejectedMsg(requestId));
       }
-      
+
       ctx.session['approval_target'] = undefined;
     });
 
@@ -313,14 +313,14 @@ export class ScenarioDashboardService implements OnModuleInit {
       const manager = await this.managers.findByTelegramId(tg.id);
       if (!manager || !manager.is_active)
         return ctx.answerCbQuery(T[lang].noPermission);
-      
+
       ctx.session ??= {};
       ctx.session['approval_target'] = { action, requestId };
-      
+
       try {
         await ctx.editMessageReplyMarkup(undefined);
       } catch {}
-      
+
       await ctx.reply(T[lang].approvalCommentPrompt);
     });
 
@@ -446,12 +446,12 @@ export class ScenarioDashboardService implements OnModuleInit {
       const tg = ctx.from;
       const lang = await this.getLang(ctx);
       const manager = await this.managers.findByTelegramId(tg.id);
-      
+
       // Faqat admin roli bilan managerlar tasdiqlashi mumkin
       const isAdminManager = await this.managers.isAdmin(tg.id);
       if (!manager || !manager.is_active || !isAdminManager)
         return ctx.answerCbQuery(T[lang].noPermission);
-        
+
       const verified = await this.workers.verifyWorker(id);
       if (!verified) return ctx.answerCbQuery(T[lang].notFound);
       try {
@@ -505,12 +505,12 @@ export class ScenarioDashboardService implements OnModuleInit {
       const tg = ctx.from;
       const lang = await this.getLang(ctx);
       const manager = await this.managers.findByTelegramId(tg.id);
-      
+
       // Faqat admin roli bilan managerlar rad etishi mumkin
       const isAdminManager = await this.managers.isAdmin(tg.id);
       if (!manager || !manager.is_active || !isAdminManager)
         return ctx.answerCbQuery(T[lang].noPermission);
-        
+
       try {
         await ctx.editMessageReplyMarkup(undefined);
       } catch {}
@@ -855,14 +855,17 @@ export class ScenarioDashboardService implements OnModuleInit {
       if (!manager) return ctx.answerCbQuery(T[lang].notFound);
 
       // Super Admin roli bilan tasdiqlash
-      const verified = await this.managers.verifyManagerWithRole(manager.id, 'SUPER_ADMIN');
+      const verified = await this.managers.verifyManagerWithRole(
+        manager.id,
+        'SUPER_ADMIN',
+      );
       try {
         await ctx.editMessageReplyMarkup(undefined);
       } catch {}
       await ctx.reply(
         lang === 'ru'
           ? `${verified.fullname} супер админ роли bilan tasdiqlandi 👑`
-          : `${verified.fullname} super admin roli bilan tasdiqlandi 👑`
+          : `${verified.fullname} super admin roli bilan tasdiqlandi 👑`,
       );
 
       // Notify manager
@@ -892,14 +895,17 @@ export class ScenarioDashboardService implements OnModuleInit {
       if (!manager) return ctx.answerCbQuery(T[lang].notFound);
 
       // Admin roli bilan tasdiqlash
-      const verified = await this.managers.verifyManagerWithRole(manager.id, 'ADMIN');
+      const verified = await this.managers.verifyManagerWithRole(
+        manager.id,
+        'ADMIN',
+      );
       try {
         await ctx.editMessageReplyMarkup(undefined);
       } catch {}
       await ctx.reply(
         lang === 'ru'
           ? `${verified.fullname} админ роли bilan tasdiqlandi 👨‍💼`
-          : `${verified.fullname} admin roli bilan tasdiqlandi 👨‍💼`
+          : `${verified.fullname} admin roli bilan tasdiqlandi 👨‍💼`,
       );
 
       // Notify manager

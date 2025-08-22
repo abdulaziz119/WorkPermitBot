@@ -670,7 +670,7 @@ export class ScenarioFrontendService implements OnModuleInit {
   }) {
     try {
       const managers = await this.managers.listActive();
-      
+
       // Faqat admin roli bilan managerlarni filter qilish
       const adminManagers = [];
       for (const manager of managers) {
@@ -679,7 +679,7 @@ export class ScenarioFrontendService implements OnModuleInit {
           adminManagers.push(manager);
         }
       }
-      
+
       await Promise.all(
         adminManagers.map(async (m) => {
           const text =
@@ -840,24 +840,29 @@ export class ScenarioFrontendService implements OnModuleInit {
   }
 
   // Yangi request haqida managerlarni xabardor qilish tugmalar bilan
-  private async notifyManagersNewRequest(requestId: number, workerId: number, reason: string): Promise<void> {
+  private async notifyManagersNewRequest(
+    requestId: number,
+    workerId: number,
+    reason: string,
+  ): Promise<void> {
     try {
       const managers = await this.managers.listActive();
-      
+
       for (const manager of managers) {
-        const messageText = manager.language === 'ru'
-          ? `Новый запрос #${requestId} • Работник:${workerId} • ${reason}`
-          : `Yangi soʼrov #${requestId} • Worker:${workerId} • ${reason}`;
+        const messageText =
+          manager.language === 'ru'
+            ? `Новый запрос #${requestId} • Работник:${workerId} • ${reason}`
+            : `Yangi soʼrov #${requestId} • Worker:${workerId} • ${reason}`;
 
         const buttons = Markup.inlineKeyboard([
           [
             Markup.button.callback(
               manager.language === 'ru' ? 'Одобрить ✅' : 'Tasdiqlash ✅',
-              `approve_${requestId}`
+              `approve_${requestId}`,
             ),
             Markup.button.callback(
               manager.language === 'ru' ? 'Отклонить ❌' : 'Rad etish ❌',
-              `reject_${requestId}`
+              `reject_${requestId}`,
             ),
           ],
         ]);
@@ -865,7 +870,9 @@ export class ScenarioFrontendService implements OnModuleInit {
         await this.bot.telegram
           .sendMessage(manager.telegram_id, messageText, buttons)
           .catch((e) =>
-            this.logger.warn(`Notify fail to ${manager.telegram_id}: ${e.message}`)
+            this.logger.warn(
+              `Notify fail to ${manager.telegram_id}: ${e.message}`,
+            ),
           );
       }
     } catch (e: any) {

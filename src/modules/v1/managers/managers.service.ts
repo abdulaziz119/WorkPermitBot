@@ -135,17 +135,21 @@ export class ManagersService {
     return manager;
   }
 
-  async verifyManagerWithRole(managerId: number, role: 'SUPER_ADMIN' | 'ADMIN'): Promise<ManagerEntity | null> {
+  async verifyManagerWithRole(
+    managerId: number,
+    role: 'SUPER_ADMIN' | 'ADMIN',
+  ): Promise<ManagerEntity | null> {
     const manager = await this.managerRepo.findOne({
       where: { id: managerId },
     });
     if (!manager) return null;
-    
+
     // Role va active holatini yangilash
     manager.is_active = true;
-    manager.role = role === 'SUPER_ADMIN' ? UserRoleEnum.SUPER_ADMIN : UserRoleEnum.ADMIN;
+    manager.role =
+      role === 'SUPER_ADMIN' ? UserRoleEnum.SUPER_ADMIN : UserRoleEnum.ADMIN;
     await this.managerRepo.save(manager);
-    
+
     return manager;
   }
 }
