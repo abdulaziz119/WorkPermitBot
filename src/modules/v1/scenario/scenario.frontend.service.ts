@@ -220,6 +220,18 @@ export class ScenarioFrontendService implements OnModuleInit {
     ]);
   }
 
+  // Always send a fresh message at bottom (after deleting old inline one)
+  private async replyFresh(
+    ctx: Ctx,
+    text: string,
+    keyboard?: ReturnType<typeof Markup.inlineKeyboard>,
+  ) {
+    try {
+      if ('message' in ctx.callbackQuery) await ctx.deleteMessage();
+    } catch {}
+    return ctx.reply(text, keyboard);
+  }
+
   private statusLabel(lang: Lang, status: string): string {
     if (lang === 'ru') {
       if (status === 'pending') return T.ru.statusPending;
@@ -604,7 +616,7 @@ export class ScenarioFrontendService implements OnModuleInit {
       if (!worker) return ctx.answerCbQuery(T[lang].notFound);
       const list = await this.requests.listByWorker(worker.id);
       if (!list.length)
-        return ctx.editMessageText(T[lang].noRequests, this.backKeyboard(lang));
+        return this.replyFresh(ctx, T[lang].noRequests, this.backKeyboard(lang));
       const lines = list
         .slice(0, 10)
         .map(
@@ -612,11 +624,7 @@ export class ScenarioFrontendService implements OnModuleInit {
             `#${r.id} • ${this.statusLabel(lang, String(r.status))} • ${r.reason}${r.manager_comment ? `\n${T[lang].commentLabel}: ${r.manager_comment}` : ''}`,
         )
         .join('\n\n');
-      try {
-        await ctx.editMessageText(lines, this.backKeyboard(lang));
-      } catch {
-        await ctx.reply(lines, this.backKeyboard(lang));
-      }
+      await this.replyFresh(ctx, lines, this.backKeyboard(lang));
     });
 
     // Back to main menu from lists
@@ -637,11 +645,7 @@ export class ScenarioFrontendService implements OnModuleInit {
           ? T[lang].greetingVerified(worker.fullname)
           : T[lang].greetingPending(worker.fullname)
         : T[lang].notFound;
-      try {
-        await ctx.editMessageText(text, this.mainMenu(isVerified, lang));
-      } catch {
-        await ctx.reply(text, this.mainMenu(isVerified, lang));
-      }
+  await this.replyFresh(ctx, text, this.mainMenu(isVerified, lang));
     });
     // Manager flows moved to ScenarioDashboardService
   }
