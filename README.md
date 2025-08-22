@@ -1,23 +1,216 @@
-<p align="center">
-  <a href="http://nestjs.com/" target="blank"><img src="https://nestjs.com/img/logo-small.svg" width="120" alt="Nest Logo" /></a>
-</p>
+# WorkPermitBot 🤖
 
-[circleci-image]: https://img.shields.io/circleci/build/github/nestjs/nest/master?token=abc123def456
-[circleci-url]: https://circleci.com/gh/nestjs/nest
+Telegram bot for managing work permits and attendance tracking using NestJS and PostgreSQL.
 
-  <p align="center">A progressive <a href="http://nodejs.org" target="_blank">Node.js</a> framework for building efficient and scalable server-side applications.</p>
-    <p align="center">
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/v/@nestjs/core.svg" alt="NPM Version" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/l/@nestjs/core.svg" alt="Package License" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/dm/@nestjs/common.svg" alt="NPM Downloads" /></a>
-<a href="https://circleci.com/gh/nestjs/nest" target="_blank"><img src="https://img.shields.io/circleci/build/github/nestjs/nest/master" alt="CircleCI" /></a>
-<a href="https://discord.gg/G7Qnnhy" target="_blank"><img src="https://img.shields.io/badge/discord-online-brightgreen.svg" alt="Discord"/></a>
-<a href="https://opencollective.com/nest#backer" target="_blank"><img src="https://opencollective.com/nest/backers/badge.svg" alt="Backers on Open Collective" /></a>
-<a href="https://opencollective.com/nest#sponsor" target="_blank"><img src="https://opencollective.com/nest/sponsors/badge.svg" alt="Sponsors on Open Collective" /></a>
-  <a href="https://paypal.me/kamilmysliwiec" target="_blank"><img src="https://img.shields.io/badge/Donate-PayPal-ff3f59.svg" alt="Donate us"/></a>
-    <a href="https://opencollective.com/nest#sponsor"  target="_blank"><img src="https://img.shields.io/badge/Support%20us-Open%20Collective-41B883.svg" alt="Support us"></a>
-  <a href="https://twitter.com/nestframework" target="_blank"><img src="https://img.shields.io/twitter/follow/nestframework.svg?style=social&label=Follow" alt="Follow us on Twitter"></a>
-</p>
+## Features ✨
+
+- 👤 **Worker Management**: Registration, verification, and profile management
+- 👨‍💼 **Manager Dashboard**: Approve/reject requests, view worker status
+- 📝 **Leave Requests**: Workers can request time off with reasons
+- 📊 **Attendance Tracking**: Check-in/check-out functionality
+- 📈 **Reporting**: Excel exports for attendance and leave data
+- 🔔 **Notifications**: Automated alerts for managers
+- 🌍 **Multi-language**: Uzbek and Russian language support
+- 🔐 **Role-based Access**: Super Admin, Admin, and Worker roles
+
+## Tech Stack 🛠️
+
+- **Backend**: NestJS (Node.js)
+- **Database**: PostgreSQL
+- **Bot Framework**: Telegraf
+- **Containerization**: Docker & Docker Compose
+- **Caching**: Redis (optional)
+- **Scheduling**: Cron jobs for automated tasks
+
+## Quick Start 🚀
+
+### Prerequisites
+
+- Docker and Docker Compose installed
+- Telegram Bot Token (get from [@BotFather](https://t.me/BotFather))
+
+### Installation
+
+1. **Clone the repository**
+   ```bash
+   git clone https://github.com/abdulaziz119/WorkPermitBot.git
+   cd WorkPermitBot
+   ```
+
+2. **Run the setup script**
+   ```bash
+   ./setup-docker.sh
+   ```
+
+3. **Configure environment variables**
+   ```bash
+   cp .env.example .env
+   # Edit .env file and add your BOT_TOKEN
+   nano .env
+   ```
+
+4. **Start the application**
+   ```bash
+   docker-compose up -d
+   ```
+
+### Manual Setup
+
+If you prefer manual setup:
+
+```bash
+# Create .env file
+cp .env.example .env
+
+# Edit environment variables
+nano .env
+
+# Build and start services
+docker-compose up --build -d
+
+# Check status
+docker-compose ps
+
+# View logs
+docker-compose logs -f app
+```
+
+## Environment Variables 🔧
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `BOT_TOKEN` | Telegram Bot Token | Required |
+| `DB_HOST` | Database host | `postgres` |
+| `DB_PORT` | Database port | `5432` |
+| `DB_NAME` | Database name | `workpermit_db` |
+| `DB_USER` | Database user | `postgres` |
+| `DB_PASSWORD` | Database password | `postgres123` |
+| `DB_SCHEMA` | Database schema | `public` |
+| `APP_PORT` | Application port | `3000` |
+| `NODE_ENV` | Environment | `production` |
+
+## Usage 📱
+
+### For Workers
+1. Start conversation with the bot
+2. Register with your details
+3. Wait for manager approval
+4. Use `/start` to access worker menu:
+   - ✅ Check-in / Check-out
+   - 📝 Request leave
+   - 📄 View my requests
+
+### For Managers
+1. Register as manager
+2. Wait for super admin approval
+3. Use `/manager` to access manager menu:
+   - 🔔 Pending requests
+   - 👤 Unverified workers
+   - 👥 View workers
+   - 📊 Export reports
+
+### For Super Admins
+1. Use `/superadmin` for additional features:
+   - 👨‍💼 Manage other managers
+   - 🚨 Receive old response notifications
+
+## Docker Commands 🐳
+
+```bash
+# Start services
+docker-compose up -d
+
+# Stop services
+docker-compose down
+
+# View logs
+docker-compose logs app
+docker-compose logs postgres
+
+# Restart a service
+docker-compose restart app
+
+# Access database
+docker-compose exec postgres psql -U postgres -d workpermit_db
+
+# Access app container
+docker-compose exec app sh
+
+# Check service status
+docker-compose ps
+
+# Remove all containers and volumes
+docker-compose down -v
+```
+
+## API Endpoints 🔗
+
+- `GET /health` - Health check endpoint
+- Application runs on: `http://localhost:3000`
+- Database accessible on: `localhost:5432`
+
+## Automated Features 🤖
+
+### Daily Notifications
+- **Time**: Every day at 10:00 AM (Tashkent timezone)
+- **Purpose**: Notify super admins about workers who received responses more than 3 days ago
+- **Recipients**: Only Super Admin role managers
+
+### Test Commands
+- `/checkoldresponses` - Check for 3+ day old responses
+- `/check5days` - Check for 5+ day old responses  
+- `/check1week` - Check for 1+ week old responses
+
+## Development 💻
+
+### Local Development
+```bash
+# Install dependencies
+npm install
+
+# Start development server
+npm run start:dev
+
+# Run tests
+npm test
+
+# Build application
+npm run build
+```
+
+## Monitoring 📊
+
+### Health Checks
+- Application: `http://localhost:3000/health`
+- Database: Built-in PostgreSQL health checks
+- Redis: Built-in Redis health checks
+
+### Logs
+```bash
+# Application logs
+docker-compose logs -f app
+
+# Database logs
+docker-compose logs -f postgres
+
+# All services logs
+docker-compose logs -f
+```
+
+## Security 🔒
+
+- Non-root user in Docker container
+- Environment variables for sensitive data
+- Role-based access control
+- Input validation and sanitization
+
+## Contributing 🤝
+
+1. Fork the repository
+2. Create your feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit your changes (`git commit -m 'Add some amazing feature'`)
+4. Push to the branch (`git push origin feature/amazing-feature`)
+5. Open a Pull Request
   <!--[![Backers on Open Collective](https://opencollective.com/nest/backers/badge.svg)](https://opencollective.com/nest#backer)
   [![Sponsors on Open Collective](https://opencollective.com/nest/sponsors/badge.svg)](https://opencollective.com/nest#sponsor)-->
 
