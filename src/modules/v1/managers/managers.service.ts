@@ -152,4 +152,15 @@ export class ManagersService {
 
     return manager;
   }
+
+  // Role bo'yicha manager larni topish
+  async findByRole(role: UserRoleEnum): Promise<ManagerEntity[]> {
+    return this.managerRepo.find({
+      where: {
+        role: role,
+        is_active: true,
+      },
+      order: { created_at: 'DESC' },
+    });
+  }
 }

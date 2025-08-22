@@ -5,6 +5,7 @@ import { ManagersService } from '../managers/managers.service';
 import { RequestsService } from '../requests/requests.service';
 import { WorkersService } from '../workers/workers.service';
 import { AttendanceService } from '../attendance/attendance.service';
+import { ScenarioNotificationService } from './scenario.notification.service';
 import { WorkersExcelService } from '../../../utils/workers.excel';
 
 type Ctx = Context & { session?: Record<string, any> };
@@ -104,6 +105,7 @@ export class ScenarioDashboardService implements OnModuleInit {
     private readonly requests: RequestsService,
     private readonly workers: WorkersService,
     private readonly attendance: AttendanceService,
+    private readonly notificationService: ScenarioNotificationService,
     private readonly excel: WorkersExcelService,
   ) {
     this.bot = getBot();
@@ -184,6 +186,39 @@ export class ScenarioDashboardService implements OnModuleInit {
       const isSuperAdmin = await this.managers.isSuperAdmin(tg.id);
       if (!isSuperAdmin) return ctx.reply(T[lang].notSuperAdmin);
       await ctx.reply(T[lang].superAdminMenuTitle, this.superAdminMenu(lang));
+    });
+
+    // Manual test command for checking old responses
+    bot.command('checkoldresponses', async (ctx) => {
+      const tg = ctx.from;
+      const lang = await this.getLang(ctx);
+      const isSuperAdmin = await this.managers.isSuperAdmin(tg.id);
+      if (!isSuperAdmin) return ctx.reply(T[lang].notSuperAdmin);
+      
+      const result = await this.notificationService.manualCheckOldResponses(3);
+      await ctx.reply(`🔍 3 kunlik check natijasi:\n${result}`);
+    });
+
+    // Test for 5 days
+    bot.command('check5days', async (ctx) => {
+      const tg = ctx.from;
+      const lang = await this.getLang(ctx);
+      const isSuperAdmin = await this.managers.isSuperAdmin(tg.id);
+      if (!isSuperAdmin) return ctx.reply(T[lang].notSuperAdmin);
+      
+      const result = await this.notificationService.manualCheckOldResponses(5);
+      await ctx.reply(`🔍 5 kunlik check natijasi:\n${result}`);
+    });
+
+    // Test for 7 days (1 week)
+    bot.command('check1week', async (ctx) => {
+      const tg = ctx.from;
+      const lang = await this.getLang(ctx);
+      const isSuperAdmin = await this.managers.isSuperAdmin(tg.id);
+      if (!isSuperAdmin) return ctx.reply(T[lang].notSuperAdmin);
+      
+      const result = await this.notificationService.manualCheckOldResponses(7);
+      await ctx.reply(`🔍 1 haftalik check natijasi:\n${result}`);
     });
 
     bot.command('activate', async (ctx) => {

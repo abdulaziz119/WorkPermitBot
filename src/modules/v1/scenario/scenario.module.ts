@@ -6,6 +6,7 @@ import { ManagersModule } from '../managers/managers.module';
 import { RequestModule } from '../requests/requests.module';
 import { AttendanceModule } from '../attendance/attendance.module';
 import { ScenarioDashboardService } from './scenario.dashboard.service';
+import { ScenarioNotificationService } from './scenario.notification.service';
 import { WorkersExcelService } from '../../../utils/workers.excel';
 
 @Module({
@@ -20,6 +21,7 @@ import { WorkersExcelService } from '../../../utils/workers.excel';
   providers: [
     ScenarioFrontendService,
     ScenarioDashboardService,
+    ScenarioNotificationService,
     WorkersExcelService,
   ],
 })

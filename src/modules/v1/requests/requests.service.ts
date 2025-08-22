@@ -112,4 +112,19 @@ export class RequestsService {
       .andWhere('request.approved_date <= :endDate', { endDate: now })
       .getMany();
   }
+
+  // 3 kundan ortiq vaqt oldin javob olgan request larni topish
+  async findResponsesOlderThan(dateThreshold: Date): Promise<RequestEntity[]> {
+    return this.repo
+      .createQueryBuilder('request')
+      .leftJoinAndSelect('request.worker', 'worker')
+      .leftJoinAndSelect('request.approved_by', 'approved_by')
+      .where('(request.status = :approved OR request.status = :rejected)', {
+        approved: RequestsStatusEnum.APPROVED,
+        rejected: RequestsStatusEnum.REJECTED,
+      })
+      .andWhere('request.updated_at < :dateThreshold', { dateThreshold })
+      .orderBy('request.updated_at', 'DESC')
+      .getMany();
+  }
 }
