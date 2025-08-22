@@ -628,9 +628,10 @@ export class ScenarioFrontendService implements OnModuleInit {
           const dateText = r.approved_date
             ? (() => {
                 const d = new Date(r.approved_date);
-                const dd = String(d.getDate()).padStart(2, '0');
-                const mm = String(d.getMonth() + 1).padStart(2, '0');
-                return `📅 ${dd}.${mm}`;
+                const dd = String(d.getUTCDate()).padStart(2, '0');
+                const mm = String(d.getUTCMonth() + 1).padStart(2, '0');
+                const yyyy = d.getUTCFullYear();
+                return `📅 ${dd}.${mm}.${yyyy}`;
               })()
             : '';
           const reasonText = `📝 ${r.reason}`;
@@ -883,7 +884,8 @@ export class ScenarioFrontendService implements OnModuleInit {
             const d = new Date(approvedDate);
             const dd = String(d.getDate()).padStart(2, '0');
             const mm = String(d.getMonth() + 1).padStart(2, '0');
-            return `${dd}.${mm}`;
+            const yyyy = d.getFullYear();
+            return `${dd}.${mm}.${yyyy}`;
           })()
         : null;
 
