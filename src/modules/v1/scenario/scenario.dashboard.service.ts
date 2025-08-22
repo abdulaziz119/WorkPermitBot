@@ -843,7 +843,8 @@ export class ScenarioDashboardService implements OnModuleInit {
     });
 
     // Approve/Reject managers from inline notification
-    bot.action(/^approve_manager_(\d+)$/, async (ctx) => {
+    // Yangi role-based manager approval handlerlar
+    bot.action(/^approve_manager_super_admin_(\d+)$/, async (ctx) => {
       const telegramId = Number(ctx.match[1]);
       const tg = ctx.from;
       const lang = await this.getLang(ctx);
@@ -853,11 +854,16 @@ export class ScenarioDashboardService implements OnModuleInit {
       const manager = await this.managers.findByTelegramId(telegramId);
       if (!manager) return ctx.answerCbQuery(T[lang].notFound);
 
-      const verified = await this.managers.verifyManager(manager.id);
+      // Super Admin roli bilan tasdiqlash
+      const verified = await this.managers.verifyManagerWithRole(manager.id, 'SUPER_ADMIN');
       try {
         await ctx.editMessageReplyMarkup(undefined);
       } catch {}
-      await ctx.reply(T[lang].managerVerifiedMsg(verified.fullname));
+      await ctx.reply(
+        lang === 'ru'
+          ? `${verified.fullname} супер админ роли bilan tasdiqlandi 👑`
+          : `${verified.fullname} super admin roli bilan tasdiqlandi 👑`
+      );
 
       // Notify manager
       try {
@@ -865,8 +871,45 @@ export class ScenarioDashboardService implements OnModuleInit {
         await this.bot.telegram.sendMessage(
           verified.telegram_id,
           mLang === 'ru'
-            ? 'Ваш профиль менеджера подтверждён ✅ Используйте /manager для меню.'
-            : "Manager profilingiz tasdiqlandi ✅ /manager buyrug'i bilan menyudan foydalaning.",
+            ? 'Ваш профиль менеджера подтверждён как Супер Админ 👑 Используйте /manager для меню.'
+            : "Manager profilingiz Super Admin roli bilan tasdiqlandi 👑 /manager buyrug'i bilan menyudan foydalaning.",
+        );
+      } catch (e) {
+        this.logger.warn(
+          `Could not notify verified manager ${verified.id}: ${String(e)}`,
+        );
+      }
+    });
+
+    bot.action(/^approve_manager_admin_(\d+)$/, async (ctx) => {
+      const telegramId = Number(ctx.match[1]);
+      const tg = ctx.from;
+      const lang = await this.getLang(ctx);
+      const isSuperAdmin = await this.managers.isSuperAdmin(tg.id);
+      if (!isSuperAdmin) return ctx.answerCbQuery(T[lang].noPermission);
+
+      const manager = await this.managers.findByTelegramId(telegramId);
+      if (!manager) return ctx.answerCbQuery(T[lang].notFound);
+
+      // Admin roli bilan tasdiqlash
+      const verified = await this.managers.verifyManagerWithRole(manager.id, 'ADMIN');
+      try {
+        await ctx.editMessageReplyMarkup(undefined);
+      } catch {}
+      await ctx.reply(
+        lang === 'ru'
+          ? `${verified.fullname} админ роли bilan tasdiqlandi 👨‍💼`
+          : `${verified.fullname} admin roli bilan tasdiqlandi 👨‍💼`
+      );
+
+      // Notify manager
+      try {
+        const mLang = (verified.language as Lang) || 'uz';
+        await this.bot.telegram.sendMessage(
+          verified.telegram_id,
+          mLang === 'ru'
+            ? 'Ваш профиль менеджера подтверждён как Админ 👨‍💼 Используйте /manager для меню.'
+            : "Manager profilingiz Admin roli bilan tasdiqlandi 👨‍💼 /manager buyrug'i bilan menyudan foydalaning.",
         );
       } catch (e) {
         this.logger.warn(

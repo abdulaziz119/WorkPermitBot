@@ -723,14 +723,22 @@ export class ScenarioFrontendService implements OnModuleInit {
         superAdmins.map(async (admin) => {
           const text =
             admin.language === 'ru'
-              ? `Новый менеджер: ${manager.fullname} (tg:${manager.telegram_id}). Требуется подтверждение.`
-              : `Yangi menejer: ${manager.fullname} (tg:${manager.telegram_id}). Tasdiqlash kerak.`;
+              ? `Новый менеджер: ${manager.fullname} (tg:${manager.telegram_id}). Выберите роль:`
+              : `Yangi menejer: ${manager.fullname} (tg:${manager.telegram_id}). Rolni tanlang:`;
           const kb = Markup.inlineKeyboard([
             [
               Markup.button.callback(
-                admin.language === 'ru' ? 'Подтвердить 👌' : 'Tasdiqlash 👌',
-                `approve_manager_${manager.telegram_id}`,
+                admin.language === 'ru' ? 'Супер Админ �' : 'Super Admin 👑',
+                `approve_manager_super_admin_${manager.telegram_id}`,
               ),
+            ],
+            [
+              Markup.button.callback(
+                admin.language === 'ru' ? 'Админ 👨‍💼' : 'Admin 👨‍�',
+                `approve_manager_admin_${manager.telegram_id}`,
+              ),
+            ],
+            [
               Markup.button.callback(
                 admin.language === 'ru' ? 'Отклонить ❌' : 'Rad etish ❌',
                 `reject_manager_${manager.telegram_id}`,
