@@ -570,7 +570,7 @@ export class ScenarioFrontendService implements OnModuleInit {
           T[lang].requestAccepted(req.id),
           this.mainMenu(true, lang),
         );
-        await this.notifyManagersNewRequest(req.id, worker.id, reason);
+        await this.notifyManagersNewRequest(req.id, worker, reason);
         return; // stop here
       }
       // Legacy single-step fallback
@@ -589,7 +589,7 @@ export class ScenarioFrontendService implements OnModuleInit {
           T[lang].requestAccepted(req.id),
           this.mainMenu(true, lang),
         );
-        await this.notifyManagersNewRequest(req.id, worker.id, reason);
+        await this.notifyManagersNewRequest(req.id, worker, reason);
         return;
       }
       return next();
@@ -842,7 +842,7 @@ export class ScenarioFrontendService implements OnModuleInit {
   // Yangi request haqida managerlarni xabardor qilish tugmalar bilan
   private async notifyManagersNewRequest(
     requestId: number,
-    workerId: number,
+    worker: any,
     reason: string,
   ): Promise<void> {
     try {
@@ -851,8 +851,8 @@ export class ScenarioFrontendService implements OnModuleInit {
       for (const manager of managers) {
         const messageText =
           manager.language === 'ru'
-            ? `Новый запрос #${requestId} • Работник:${workerId} • ${reason}`
-            : `Yangi soʼrov #${requestId} • Worker:${workerId} • ${reason}`;
+            ? `Новый запрос #${requestId}\n👤 ${worker.fullname} (ID:${worker.id})\n📝 ${reason}`
+            : `Yangi soʼrov #${requestId}\n👤 ${worker.fullname} (ID:${worker.id})\n📝 ${reason}`;
 
         const buttons = Markup.inlineKeyboard([
           [

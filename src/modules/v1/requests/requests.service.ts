@@ -28,7 +28,15 @@ export class RequestsService {
   async listPending(): Promise<RequestEntity[]> {
     return this.repo.find({
       where: { status: RequestsStatusEnum.PENDING },
+      relations: ['worker'],
       order: { created_at: 'DESC' },
+    });
+  }
+
+  async findByIdWithWorker(requestId: number): Promise<RequestEntity | null> {
+    return this.repo.findOne({
+      where: { id: requestId },
+      relations: ['worker', 'approved_by'],
     });
   }
 

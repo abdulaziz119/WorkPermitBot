@@ -221,8 +221,10 @@ export class ScenarioDashboardService implements OnModuleInit {
 
       const message = `${T[lang].managerPendingBtn}:\n\n`;
       for (const r of pending.slice(0, 10)) {
+        const workerName = r.worker?.fullname || `Worker ID: ${r.worker_id}`;
+        const messageText = `#${r.id}\n👤 ${workerName}\n📝 ${r.reason}`;
         await ctx.reply(
-          `#${r.id} • Worker:${r.worker_id} • ${r.reason}`,
+          messageText,
           Markup.inlineKeyboard([
             [
               Markup.button.callback(T[lang].approveBtn, `approve_${r.id}`),
@@ -296,9 +298,13 @@ export class ScenarioDashboardService implements OnModuleInit {
       if (action === 'approve') {
         await this.requests.approve(requestId, manager.id, comment);
         await ctx.reply(T[lang].approvedMsg(requestId));
+        // Worker ga xabar yuborish
+        await this.notifyWorkerDecision(requestId, 'approved', manager.fullname, comment, lang);
       } else {
         await this.requests.reject(requestId, manager.id, comment);
         await ctx.reply(T[lang].rejectedMsg(requestId));
+        // Worker ga xabar yuborish
+        await this.notifyWorkerDecision(requestId, 'rejected', manager.fullname, comment, lang);
       }
 
       ctx.session['approval_target'] = undefined;
@@ -958,5 +964,49 @@ export class ScenarioDashboardService implements OnModuleInit {
         );
       }
     });
+  }
+
+  // Worker ga manager qarori haqida xabar berish
+  private async notifyWorkerDecision(
+    requestId: number,
+    decision: 'approved' | 'rejected',
+    managerName: string,
+    comment?: string,
+    managerLang?: Lang,
+  ): Promise<void> {
+    try {
+      const request = await this.requests.findByIdWithWorker(requestId);
+      if (!request || !request.worker) return;
+
+      const worker = request.worker;
+      const workerLang: Lang = (worker.language as Lang) || 'uz';
+
+      let messageText = '';
+      if (decision === 'approved') {
+        messageText = workerLang === 'ru' 
+          ? `✅ Ваш запрос #${requestId} одобрен!\n👨‍💼 Менеджер: ${managerName}`
+          : `✅ #${requestId} soʼrovingiz tasdiqlandi!\n👨‍💼 Manager: ${managerName}`;
+      } else {
+        messageText = workerLang === 'ru'
+          ? `❌ Ваш запрос #${requestId} отклонён\n👨‍💼 Менеджер: ${managerName}`
+          : `❌ #${requestId} soʼrovingiz rad etildi\n👨‍💼 Manager: ${managerName}`;
+      }
+
+      if (comment && comment.trim()) {
+        messageText += workerLang === 'ru'
+          ? `\n📝 Комментарий: ${comment}`
+          : `\n📝 Izoh: ${comment}`;
+      }
+
+      await this.bot.telegram
+        .sendMessage(worker.telegram_id, messageText)
+        .catch((e) =>
+          this.logger.warn(
+            `Could not notify worker ${worker.id} about decision: ${e.message}`,
+          ),
+        );
+    } catch (e: any) {
+      this.logger.error('notifyWorkerDecision error', e?.message || e);
+    }
   }
 }
