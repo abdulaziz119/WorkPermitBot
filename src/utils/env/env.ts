@@ -1,14 +1,14 @@
 import * as dotenv from 'dotenv';
 
 dotenv.config();
-const DB_PORT = parseInt(process.env.DB_PORT || '5432', 10);
+const DB_PORT = parseInt(process.env.DB_PORT || '5433', 10);
 const DB_HOST = process.env.DB_HOST || '';
-const DB_USER = process.env.DB_USER || '';
-const DB_DB = process.env.DB_NAME || '';
+const DB_USER = process.env.DB_USERNAME || '';
+const DB_DB = process.env.DB_DATABASE || '';
 const DB_PASS = process.env.DB_PASSWORD || '';
 const DB_SCHEMA = process.env.DB_SCHEMA || '';
 
-const TELEGRAM_BOT_TOKEN = process.env.BOT_TOKEN || '';
+const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN || '';
 
 const PORT = process.env.PORT || 3000;
 

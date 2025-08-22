@@ -2,6 +2,7 @@ import { Inject, Injectable } from '@nestjs/common';
 import { Repository } from 'typeorm';
 import { MODELS } from '../../../constants/constants';
 import { AttendanceEntity } from '../../../entity/attendance.entity';
+import { nowInTz, currentDateString } from '../../../utils/time/timezone';
 
 function startOfDay(date = new Date()): Date {
   const d = new Date(date);
@@ -41,15 +42,13 @@ export class AttendanceService {
   }
 
   async checkIn(workerId: number): Promise<AttendanceEntity> {
-    const now = new Date();
+    const now = nowInTz();
     let today: AttendanceEntity | null = await this.getToday(workerId, now);
     if (!today) {
-      const yyyy: number = now.getFullYear();
-      const mm: string = String(now.getMonth() + 1).padStart(2, '0');
-      const dd: string = String(now.getDate()).padStart(2, '0');
+      const dateStr = currentDateString();
       today = this.repo.create({
         worker_id: workerId,
-        date: `${yyyy}-${mm}-${dd}`,
+        date: dateStr,
         check_in: now,
       });
     } else if (!today.check_in) {
@@ -65,7 +64,7 @@ export class AttendanceService {
   }
 
   async checkOut(workerId: number): Promise<AttendanceEntity> {
-    const now = new Date();
+    const now = nowInTz();
     const today: AttendanceEntity | null = await this.getToday(workerId, now);
     if (!today || !today.check_in) {
       const err = new Error('CHECKIN_REQUIRED');

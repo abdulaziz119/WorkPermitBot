@@ -854,20 +854,46 @@ export class ScenarioFrontendService implements OnModuleInit {
         (manager) => manager.role === UserRoleEnum.SUPER_ADMIN,
       );
 
+      // Load request to access approved_date
+      const request = await this.requests.findByIdWithWorker(requestId);
+      const approvedDate: Date | null = request?.approved_date || null;
+      const dateStr = approvedDate
+        ? (() => {
+            const d = new Date(approvedDate);
+            const dd = String(d.getDate()).padStart(2, '0');
+            const mm = String(d.getMonth() + 1).padStart(2, '0');
+            return `${dd}.${mm}`;
+          })()
+        : null;
+
       for (const manager of superAdminManagers) {
-        const messageText =
-          manager.language === 'ru'
-            ? `🔔 Новый запрос на отгул!\n\n👤 Сотрудник: ${worker.fullname}\n📝 Причина: ${reason}\n� ID запроса: #${requestId}`
-            : `🔔 Yangi ruxsat so'rovi!\n\n👤 Ishchi: ${worker.fullname}\n📝 Sabab: ${reason}\n� So'rov ID: #${requestId}`;
+        const isRu = manager.language === 'ru';
+        const header = isRu
+          ? '🔔 Новый запрос на отгул!'
+          : "🔔 Yangi ruxsat so'rovi!";
+        const workerLine = isRu
+          ? `👤 Сотрудник: ${worker.fullname}`
+          : `� Ishchi: ${worker.fullname}`;
+        const dateLine = dateStr
+          ? isRu
+            ? `📅 Дата: ${dateStr}`
+            : `� Sana: ${dateStr}`
+          : '';
+        const reasonLine = isRu
+          ? `📝 Причина: ${reason}`
+          : `📝 Sabab: ${reason}`;
+        const messageText = [header, '', workerLine, dateLine, reasonLine]
+          .filter(Boolean)
+          .join('\n');
 
         const buttons = Markup.inlineKeyboard([
           [
             Markup.button.callback(
-              manager.language === 'ru' ? 'Одобрить ✅' : 'Tasdiqlash ✅',
+              isRu ? 'Одобрить ✅' : 'Tasdiqlash ✅',
               `approve_${requestId}`,
             ),
             Markup.button.callback(
-              manager.language === 'ru' ? 'Отклонить ❌' : 'Rad etish ❌',
+              isRu ? 'Отклонить ❌' : 'Rad etish ❌',
               `reject_${requestId}`,
             ),
           ],

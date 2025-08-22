@@ -158,6 +158,26 @@ export class ScenarioDashboardService implements OnModuleInit {
     ]);
   }
 
+  // Quick helper to show main menu after actions
+  private async showManagerMenuShortcut(
+    ctx: Ctx,
+    lang: Lang,
+    telegramId: number,
+  ) {
+    try {
+      const isSuperAdmin = await this.managers.isSuperAdmin(telegramId);
+      const menu = isSuperAdmin
+        ? this.superAdminMenu(lang)
+        : this.managerMenu(lang);
+      await ctx.reply(
+        lang === 'ru' ? 'Главное меню' : 'Asosiy menyu',
+        menu,
+      );
+    } catch (e) {
+      // ignore navigation errors
+    }
+  }
+
   private registerHandlers() {
     const bot = this.bot;
 
@@ -332,12 +352,15 @@ export class ScenarioDashboardService implements OnModuleInit {
 
       if (action === 'approve') {
         await this.requests.approve(requestId, manager.id, comment);
-        await ctx.reply(T[lang].approvedMsg(requestId));
+  await ctx.reply(T[lang].approvedMsg(requestId));
+  // Show manager menu navigation
+  await this.showManagerMenuShortcut(ctx, lang, tg.id);
         // Worker ga xabar yuborish
         await this.notifyWorkerDecision(requestId, 'approved', manager.fullname, comment, lang);
       } else {
         await this.requests.reject(requestId, manager.id, comment);
-        await ctx.reply(T[lang].rejectedMsg(requestId));
+  await ctx.reply(T[lang].rejectedMsg(requestId));
+  await this.showManagerMenuShortcut(ctx, lang, tg.id);
         // Worker ga xabar yuborish
         await this.notifyWorkerDecision(requestId, 'rejected', manager.fullname, comment, lang);
       }
@@ -379,9 +402,25 @@ export class ScenarioDashboardService implements OnModuleInit {
         if (target.action === 'approve') {
           await this.requests.approve(target.requestId, manager.id, comment);
           await ctx.reply(T[lang].approvedMsg(target.requestId));
+          await this.notifyWorkerDecision(
+            target.requestId,
+            'approved',
+            manager.fullname,
+            comment,
+            lang,
+          );
+          await this.showManagerMenuShortcut(ctx, lang, tg.id);
         } else {
           await this.requests.reject(target.requestId, manager.id, comment);
           await ctx.reply(T[lang].rejectedMsg(target.requestId));
+          await this.notifyWorkerDecision(
+            target.requestId,
+            'rejected',
+            manager.fullname,
+            comment,
+            lang,
+          );
+          await this.showManagerMenuShortcut(ctx, lang, tg.id);
         }
         ctx.session['approval_target'] = undefined;
         return; // handled
