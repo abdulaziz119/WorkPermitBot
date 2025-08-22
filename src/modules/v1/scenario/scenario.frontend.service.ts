@@ -5,6 +5,7 @@ import { WorkersService } from '../workers/workers.service';
 import { ManagersService } from '../managers/managers.service';
 import { RequestsService } from '../requests/requests.service';
 import { AttendanceService } from '../attendance/attendance.service';
+import { UserRoleEnum } from '../../../utils/enum/user.enum';
 
 type Ctx = Context & { session?: Record<string, any> };
 
@@ -839,7 +840,7 @@ export class ScenarioFrontendService implements OnModuleInit {
     }
   }
 
-  // Yangi request haqida managerlarni xabardor qilish tugmalar bilan
+  // Yangi request haqida faqat super admin managerlarni xabardor qilish tugmalar bilan
   private async notifyManagersNewRequest(
     requestId: number,
     worker: any,
@@ -848,11 +849,16 @@ export class ScenarioFrontendService implements OnModuleInit {
     try {
       const managers = await this.managers.listActive();
 
-      for (const manager of managers) {
+      // Faqat super admin rolega ega managerlarni filtrlash
+      const superAdminManagers = managers.filter(
+        (manager) => manager.role === UserRoleEnum.SUPER_ADMIN,
+      );
+
+      for (const manager of superAdminManagers) {
         const messageText =
           manager.language === 'ru'
-            ? `Новый запрос #${requestId}\n👤 ${worker.fullname} (ID:${worker.id})\n📝 ${reason}`
-            : `Yangi soʼrov #${requestId}\n👤 ${worker.fullname} (ID:${worker.id})\n📝 ${reason}`;
+            ? `🔔 Новый запрос на отгул!\n\n👤 Сотрудник: ${worker.fullname}\n📝 Причина: ${reason}\n� ID запроса: #${requestId}`
+            : `🔔 Yangi ruxsat so'rovi!\n\n👤 Ishchi: ${worker.fullname}\n📝 Sabab: ${reason}\n� So'rov ID: #${requestId}`;
 
         const buttons = Markup.inlineKeyboard([
           [
