@@ -85,6 +85,9 @@ const T = {
     notFound: 'Topilmadi',
     commentLabel: 'Izoh',
     approvedByManager: 'Profilingiz menejer tomonidan tasdiqlandi ✅',
+    prevBtn: '⬅️ Oldingi',
+    nextBtn: 'Keyingi ➡️',
+    pageInfo: (current: number, total: number) => `Sahifa ${current}/${total}`,
   },
   ru: {
     chooseLang: 'Выберите язык:',
@@ -159,6 +162,9 @@ const T = {
     notFound: 'Не найдено',
     commentLabel: 'Комментарий',
     approvedByManager: 'Ваш профиль подтверждён менеджером ✅',
+    prevBtn: '⬅️ Назад',
+    nextBtn: 'Далее ➡️',
+    pageInfo: (current: number, total: number) => `Страница ${current}/${total}`,
   },
 } as const;
 
@@ -631,21 +637,31 @@ export class ScenarioFrontendService implements OnModuleInit {
       return next();
     });
 
-    // Worker: list my requests
-    bot.action('my_requests', async (ctx) => {
+    // Worker: list my requests with pagination
+    bot.action(/^my_requests(?:_(\d+))?$/, async (ctx) => {
       const tg = ctx.from;
       const worker = await this.workers.findByTelegramId(tg.id);
       const lang = await this.getLang(ctx);
       if (!worker) return ctx.answerCbQuery(T[lang].notFound);
-      const list = await this.requests.listByWorker(worker.id);
-      if (!list.length)
+      
+      const page = ctx.match[1] ? Number(ctx.match[1]) : 1;
+      const pageSize = 5;
+      const allRequests = await this.requests.listByWorker(worker.id);
+      
+      if (!allRequests.length)
         return this.replyFresh(
           ctx,
           T[lang].noRequests,
           this.backKeyboard(lang),
         );
-      const lines = list
-        .slice(0, 10)
+      
+      // Latest requests first (already sorted by created_at DESC from database)
+      const totalPages = Math.ceil(allRequests.length / pageSize);
+      const startIndex = (page - 1) * pageSize;
+      const endIndex = startIndex + pageSize;
+      const pageRequests = allRequests.slice(startIndex, endIndex);
+      
+      const lines = pageRequests
         .map((r) => {
           const statusText = this.statusLabel(lang, String(r.status));
           const dateText = r.approved_date
@@ -680,7 +696,32 @@ export class ScenarioFrontendService implements OnModuleInit {
           return parts.join('\n');
         })
         .join('\n\n');
-      await this.replyFresh(ctx, lines, this.backKeyboard(lang));
+      
+      // Build navigation buttons
+      const navButtons = [];
+      const pageInfo = T[lang].pageInfo(page, totalPages);
+      
+      if (page > 1) {
+        navButtons.push(
+          Markup.button.callback(T[lang].prevBtn, `my_requests_${page - 1}`)
+        );
+      }
+      
+      if (page < totalPages) {
+        navButtons.push(
+          Markup.button.callback(T[lang].nextBtn, `my_requests_${page + 1}`)
+        );
+      }
+      
+      const buttons = [];
+      if (navButtons.length > 0) {
+        buttons.push(navButtons);
+      }
+      buttons.push([Markup.button.callback(T[lang].backBtn, 'back_to_menu')]);
+      
+      const message = `${T[lang].btnMyRequests}\n${pageInfo}\n\n${lines}`;
+      
+      await this.replyFresh(ctx, message, Markup.inlineKeyboard(buttons));
     });
 
     // Back to main menu from lists
