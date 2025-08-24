@@ -277,7 +277,42 @@ export class ScenarioDashboardService implements OnModuleInit {
       const message = `${T[lang].managerPendingBtn}:\n\n`;
       for (const r of pending.slice(0, 10)) {
         const workerName = r.worker?.fullname || `Worker ID: ${r.worker_id}`;
-        const messageText = `#${r.id}\n👤 ${workerName}\n📝 ${r.reason}`;
+        
+        // Format dates and calculate days
+        let dateInfo = '';
+        let daysCount = '';
+        
+        if (r.approved_date) {
+          const startDate = new Date(r.approved_date);
+          const startDD = String(startDate.getUTCDate()).padStart(2, '0');
+          const startMM = String(startDate.getUTCMonth() + 1).padStart(2, '0');
+          const startYYYY = startDate.getUTCFullYear();
+          
+          if (r.return_date) {
+            const endDate = new Date(r.return_date);
+            const endDD = String(endDate.getUTCDate()).padStart(2, '0');
+            const endMM = String(endDate.getUTCMonth() + 1).padStart(2, '0');
+            const endYYYY = endDate.getUTCFullYear();
+            
+            // Calculate days between dates
+            const timeDiff = endDate.getTime() - startDate.getTime();
+            const daysDiff = Math.ceil(timeDiff / (1000 * 3600 * 24));
+            
+            dateInfo = `📅 ${startDD}.${startMM}.${startYYYY} - ${endDD}.${endMM}.${endYYYY}`;
+            daysCount = lang === 'ru' ? `⏱ ${daysDiff} дней` : `⏱ ${daysDiff} kun`;
+          } else {
+            dateInfo = `📅 ${startDD}.${startMM}.${startYYYY}`;
+          }
+        }
+        
+        const messageText = [
+          `#${r.id}`,
+          `👤 ${workerName}`,
+          dateInfo,
+          daysCount,
+          `📝 ${r.reason}`
+        ].filter(Boolean).join('\n');
+        
         await ctx.reply(
           messageText,
           Markup.inlineKeyboard([

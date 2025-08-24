@@ -914,36 +914,50 @@ export class ScenarioFrontendService implements OnModuleInit {
         (manager) => manager.role === UserRoleEnum.SUPER_ADMIN,
       );
 
-      // Load request to access approved_date
+      // Load request to access approved_date and return_date
       const request = await this.requests.findByIdWithWorker(requestId);
       const approvedDate: Date | null = request?.approved_date || null;
-      const dateStr = approvedDate
-        ? (() => {
-            const d = new Date(approvedDate);
-            const dd = String(d.getDate()).padStart(2, '0');
-            const mm = String(d.getMonth() + 1).padStart(2, '0');
-            const yyyy = d.getFullYear();
-            return `${dd}.${mm}.${yyyy}`;
-          })()
-        : null;
+      const returnDate: Date | null = request?.return_date || null;
 
       for (const manager of superAdminManagers) {
         const isRu = manager.language === 'ru';
+        
+        let dateInfo = '';
+        let daysInfo = '';
+        
+        if (approvedDate) {
+          const startDate = new Date(approvedDate);
+          const startDD = String(startDate.getDate()).padStart(2, '0');
+          const startMM = String(startDate.getMonth() + 1).padStart(2, '0');
+          const startYYYY = startDate.getFullYear();
+          
+          if (returnDate) {
+            const endDate = new Date(returnDate);
+            const endDD = String(endDate.getDate()).padStart(2, '0');
+            const endMM = String(endDate.getMonth() + 1).padStart(2, '0');
+            const endYYYY = endDate.getFullYear();
+            
+            // Calculate days between dates
+            const timeDiff = endDate.getTime() - startDate.getTime();
+            const daysDiff = Math.ceil(timeDiff / (1000 * 3600 * 24));
+            
+            dateInfo = `📅 ${startDD}.${startMM}.${startYYYY} - ${endDD}.${endMM}.${endYYYY}`;
+            daysInfo = daysDiff > 0 ? (isRu ? `⏱ ${daysDiff} дней` : `⏱ ${daysDiff} kun`) : '';
+          } else {
+            dateInfo = `📅 ${startDD}.${startMM}.${startYYYY}`;
+          }
+        }
+
         const header = isRu
           ? '🔔 Новый запрос на отгул!'
           : "🔔 Yangi ruxsat so'rovi!";
         const workerLine = isRu
           ? `👤 Сотрудник: ${worker.fullname}`
-          : `� Ishchi: ${worker.fullname}`;
-        const dateLine = dateStr
-          ? isRu
-            ? `📅 Дата: ${dateStr}`
-            : `� Sana: ${dateStr}`
-          : '';
+          : `👤 Ishchi: ${worker.fullname}`;
         const reasonLine = isRu
           ? `📝 Причина: ${reason}`
           : `📝 Sabab: ${reason}`;
-        const messageText = [header, '', workerLine, dateLine, reasonLine]
+        const messageText = [header, '', workerLine, dateInfo, daysInfo, reasonLine]
           .filter(Boolean)
           .join('\n');
 
