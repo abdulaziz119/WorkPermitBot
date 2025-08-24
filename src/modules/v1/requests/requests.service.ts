@@ -15,11 +15,13 @@ export class RequestsService {
     workerId: number,
     reason: string,
     approvedDate?: Date,
+    returnDate?: Date,
   ): Promise<RequestEntity> {
     const entity: RequestEntity = this.repo.create({
       worker_id: workerId,
       reason,
       approved_date: approvedDate || null,
+      return_date: returnDate || null,
       status: RequestsStatusEnum.PENDING,
     });
     return this.repo.save(entity);

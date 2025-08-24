@@ -31,6 +31,9 @@ export class RequestEntity extends BaseEntity {
   @Column({ type: 'date', nullable: true })
   approved_date: Date | null; // Qaysi sanaga ruxsat berildi
 
+  @Column({ type: 'date', nullable: true })
+  return_date: Date | null; // Qaysi sanada ishga qaytadi
+
   @Column({ type: 'integer', nullable: true })
   manager_id: number;
 

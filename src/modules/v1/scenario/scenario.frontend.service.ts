@@ -46,6 +46,8 @@ const T = {
     checkInRequired: 'Avval check-in bosing, soʼng check-out.',
     enterDate:
       'Iltimos, ruxsat olinadigan sanani kiriting (format: DD.MM yoki DD-MM). Masalan: 22.08',
+    enterReturnDate:
+      'Iltimos, ishga qaytish sanani kiriting (format: DD.MM yoki DD-MM). Masalan: 25.08',
     invalidDate:
       'Notoʼgʼri sana. Iltimos, DD.MM formatida kiriting. Masalan: 05.09',
     enterReasonShort: 'Sababni yozing (masalan: oilaviy ishlar).',
@@ -120,6 +122,8 @@ const T = {
     checkInRequired: 'Сначала выполните check-in, затем check-out.',
     enterDate:
       'Пожалуйста, введите дату отгула (формат: ДД.ММ или ДД-ММ). Например: 22.08',
+    enterReturnDate:
+      'Пожалуйста, введите дату возвращения на работу (формат: ДД.ММ или ДД-ММ). Например: 25.08',
     invalidDate: 'Неверная дата. Введите в формате ДД.ММ. Например: 05.09',
     enterReasonShort: 'Введите причину (например: семейные дела).',
     enterReason:
@@ -545,7 +549,7 @@ export class ScenarioFrontendService implements OnModuleInit {
         ctx.session.pending_role = undefined;
         return; // stop here
       }
-      // New flow: ask date then reason
+      // New flow: ask date then return date then reason
       const flow = ctx.session?.['req_flow'];
       if (flow?.step === 'await_date') {
         const lang = await this.getLang(ctx);
@@ -555,8 +559,23 @@ export class ScenarioFrontendService implements OnModuleInit {
           return; // keep waiting for valid date
         }
         ctx.session['req_flow'] = {
-          step: 'await_reason',
+          step: 'await_return_date',
           approvedDate: dt.toISOString(),
+        };
+        await ctx.reply(T[lang].enterReturnDate, this.backKeyboard(lang));
+        return;
+      }
+      if (flow?.step === 'await_return_date') {
+        const lang = await this.getLang(ctx);
+        const dt = this.parseDayMonth(ctx.message.text);
+        if (!dt) {
+          await ctx.reply(T[lang].invalidDate, this.backKeyboard(lang));
+          return; // keep waiting for valid return date
+        }
+        ctx.session['req_flow'] = {
+          step: 'await_reason',
+          approvedDate: flow.approvedDate,
+          returnDate: dt.toISOString(),
         };
         await ctx.reply(T[lang].enterReasonShort, this.backKeyboard(lang));
         return;
@@ -573,10 +592,14 @@ export class ScenarioFrontendService implements OnModuleInit {
         const approvedDate = flow.approvedDate
           ? new Date(flow.approvedDate)
           : undefined;
+        const returnDate = flow.returnDate
+          ? new Date(flow.returnDate)
+          : undefined;
         const req = await this.requests.createRequest(
           worker.id,
           reason,
           approvedDate,
+          returnDate,
         );
         ctx.session['req_flow'] = undefined;
         await ctx.reply(
@@ -596,7 +619,7 @@ export class ScenarioFrontendService implements OnModuleInit {
           return ctx.reply(T[lang].notVerified);
         }
         const reason = ctx.message.text.trim();
-        const req = await this.requests.createRequest(worker.id, reason);
+        const req = await this.requests.createRequest(worker.id, reason, undefined, undefined);
         ctx.session['awaiting_reason'] = false;
         await ctx.reply(
           T[lang].requestAccepted(req.id),
@@ -634,12 +657,27 @@ export class ScenarioFrontendService implements OnModuleInit {
                 return `📅 ${dd}.${mm}.${yyyy}`;
               })()
             : '';
+          const returnDateText = r.return_date
+            ? (() => {
+                const d = new Date(r.return_date);
+                const dd = String(d.getUTCDate()).padStart(2, '0');
+                const mm = String(d.getUTCMonth() + 1).padStart(2, '0');
+                const yyyy = d.getUTCFullYear();
+                return `🔄 ${dd}.${mm}.${yyyy}`;
+              })()
+            : '';
           const reasonText = `📝 ${r.reason}`;
           const commentText = r.manager_comment
             ? `\n${T[lang].commentLabel}: ${r.manager_comment}`
             : '';
 
-          return `#${r.id} • ${statusText}${dateText ? `\n${dateText}` : ''}\n${reasonText}${commentText}`;
+          const parts = [`#${r.id} • ${statusText}`];
+          if (dateText) parts.push(dateText);
+          if (returnDateText) parts.push(returnDateText);
+          parts.push(reasonText);
+          if (commentText) parts.push(commentText.trim());
+          
+          return parts.join('\n');
         })
         .join('\n\n');
       await this.replyFresh(ctx, lines, this.backKeyboard(lang));
