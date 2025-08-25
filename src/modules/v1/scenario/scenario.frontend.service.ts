@@ -937,14 +937,22 @@ export class ScenarioFrontendService implements OnModuleInit {
   private async sendCheckInReminders() {
     try {
       const workers = await this.workers.listVerified();
+      if (!workers.length) return;
+      const workerIds = workers.map((w) => w.id);
+      const todayMap = await this.attendance.getTodayForWorkers(workerIds);
+      const now = new Date(new Date().toLocaleString('en-US', { timeZone: APP_TIMEZONE }));
+
       await Promise.all(
         workers.map(async (w) => {
           if (this.reminderState.doneMorning.has(w.telegram_id)) return;
+          const rec = todayMap.get(w.id);
+          // Skip if already checked in
+            if (rec?.check_in) return;
           const lang: Lang = (w.language as any) || 'uz';
           const text =
             lang === 'ru'
-              ? 'Через 10 минут начинается работа. Нажмите Пришёл (Check-in) ✅'
-              : '10 daqiqadan soʼng ish boshlanadi. Kelish (Check-in) ✅ tugmasini bosing.';
+              ? 'Пожалуйста, отметьте прибытие: Пришёл (Check-in) ✅'
+              : 'Iltimos, kelganingizni tasdiqlang: Kelish (Check-in) ✅';
           await this.bot.telegram
             .sendMessage(w.telegram_id, text)
             .then(() => this.reminderState.doneMorning.add(w.telegram_id))
@@ -959,14 +967,20 @@ export class ScenarioFrontendService implements OnModuleInit {
   private async sendCheckOutReminders() {
     try {
       const workers = await this.workers.listVerified();
+      if (!workers.length) return;
+      const workerIds = workers.map((w) => w.id);
+      const todayMap = await this.attendance.getTodayForWorkers(workerIds);
       await Promise.all(
         workers.map(async (w) => {
           if (this.reminderState.doneEvening.has(w.telegram_id)) return;
+          const rec = todayMap.get(w.id);
+          // Send only if has check_in but no check_out yet
+          if (!rec?.check_in || rec.check_out) return;
           const lang: Lang = (w.language as any) || 'uz';
           const text =
             lang === 'ru'
-              ? 'Рабочее время завершается. Не забудьте нажать Ушёл (Check-out) 🕘'
-              : 'Ish vaqti tugamoqda. Ketish (Check-out) 🕘 tugmasini bosishni unutmang.';
+              ? 'Пожалуйста, отметьте уход: Ушёл (Check-out) 🕘'
+              : 'Iltimos, ketganingizni tasdiqlang: Ketish (Check-out) 🕘';
           await this.bot.telegram
             .sendMessage(w.telegram_id, text)
             .then(() => this.reminderState.doneEvening.add(w.telegram_id))

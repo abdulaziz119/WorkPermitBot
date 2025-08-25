@@ -41,6 +41,32 @@ export class AttendanceService {
       .getOne();
   }
 
+  /**
+   * Batch load today's attendance records for many workers (latest per worker).
+   * Returns a Map keyed by worker_id.
+   */
+  async getTodayForWorkers(
+    workerIds: number[],
+    today = new Date(),
+  ): Promise<Map<number, AttendanceEntity>> {
+    if (!workerIds.length) return new Map();
+    const from = startOfDay(today);
+    const to = endOfDay(today);
+    const rows = await this.repo
+      .createQueryBuilder('a')
+      .where('a.worker_id IN (:...workerIds)', { workerIds })
+      .andWhere('a.created_at BETWEEN :from AND :to', { from, to })
+      .orderBy('a.worker_id', 'ASC')
+      .addOrderBy('a.created_at', 'DESC')
+      .getMany();
+    const map = new Map<number, AttendanceEntity>();
+    for (const row of rows) {
+      // Since ordered DESC by created_at, first occurrence per worker is latest
+      if (!map.has(row.worker_id)) map.set(row.worker_id, row);
+    }
+    return map;
+  }
+
   async checkIn(workerId: number): Promise<AttendanceEntity> {
     const now = nowInTz();
     let today: AttendanceEntity | null = await this.getToday(workerId, now);
