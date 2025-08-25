@@ -305,7 +305,11 @@ export class ScenarioFrontendService implements OnModuleInit {
     return dt;
   }
 
-  private async showManagerMenuIfActive(ctx: Ctx, manager: any, lang: Lang) {
+  private async showManagerMenuIfActive(
+    ctx: Ctx,
+    manager: any,
+    lang: Lang,
+  ): Promise<void> {
     if (!manager.is_active) {
       await ctx.reply(
         T[lang].greetingManagerPending(manager.fullname),
@@ -868,7 +872,7 @@ export class ScenarioFrontendService implements OnModuleInit {
     id: number;
     fullname: string;
     telegram_id: number;
-  }) {
+  }): Promise<void> {
     try {
       const managers: ManagerEntity[] = await this.managers.listActive();
 
@@ -884,7 +888,7 @@ export class ScenarioFrontendService implements OnModuleInit {
       }
 
       await Promise.all(
-        adminManagers.map(async (m) => {
+        adminManagers.map(async (m): Promise<void> => {
           const text: string =
             m.language === language.RU
               ? `Новый работник: ${worker.fullname} (tg:${worker.telegram_id}). Требуется подтверждение.`
@@ -919,12 +923,12 @@ export class ScenarioFrontendService implements OnModuleInit {
     telegram_id: number;
     fullname: string;
     language: language;
-  }) {
+  }): Promise<void> {
     try {
       const superAdmins: ManagerEntity[] =
         await this.managers.listSuperAdmins();
       await Promise.all(
-        superAdmins.map(async (admin: ManagerEntity) => {
+        superAdmins.map(async (admin: ManagerEntity): Promise<void> => {
           const text: string =
             admin.language === language.RU
               ? `Новый менеджер: ${manager.fullname} (tg:${manager.telegram_id}). Выберите роль:`
@@ -968,19 +972,19 @@ export class ScenarioFrontendService implements OnModuleInit {
   }
 
   // --- Reminders ---
-  private startReminderLoop() {
+  private startReminderLoop(): void {
     // Tick every 30 seconds
     setInterval(() => this.reminderTick().catch(() => void 0), 30_000);
   }
 
-  private dateKey(d = new Date()) {
+  private dateKey(d = new Date()): string {
     const y: number = d.getFullYear();
     const m: string = String(d.getMonth() + 1).padStart(2, '0');
     const day: string = String(d.getDate()).padStart(2, '0');
     return `${y}-${m}-${day}`;
   }
 
-  private async reminderTick() {
+  private async reminderTick(): Promise<void> {
     // Generate current time in configured timezone to avoid server TZ drift
     const now = new Date(
       new Date().toLocaleString('en-US', { timeZone: APP_TIMEZONE }),
@@ -1006,7 +1010,7 @@ export class ScenarioFrontendService implements OnModuleInit {
     }
   }
 
-  private async sendCheckInReminders() {
+  private async sendCheckInReminders(): Promise<void> {
     try {
       const workers: WorkerEntity[] = await this.workers.listVerified();
       if (!workers.length) return;
@@ -1039,7 +1043,7 @@ export class ScenarioFrontendService implements OnModuleInit {
     }
   }
 
-  private async sendCheckOutReminders() {
+  private async sendCheckOutReminders(): Promise<void> {
     try {
       const workers: WorkerEntity[] = await this.workers.listVerified();
       if (!workers.length) return;

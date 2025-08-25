@@ -103,7 +103,7 @@ const T = {
 
 @Injectable()
 export class ScenarioDashboardService implements OnModuleInit {
-  private readonly logger = new Logger(ScenarioDashboardService.name);
+  private readonly logger: Logger = new Logger(ScenarioDashboardService.name);
   private readonly bot: Telegraf<Ctx>;
 
   constructor(
@@ -186,7 +186,7 @@ export class ScenarioDashboardService implements OnModuleInit {
     }
   }
 
-  private registerHandlers() {
+  private registerHandlers(): void {
     const bot = this.bot;
 
     // Manager menu
@@ -1004,7 +1004,7 @@ export class ScenarioDashboardService implements OnModuleInit {
       await ctx.editMessageText(message, Markup.inlineKeyboard(buttons));
     });
 
-    bot.action(/^verify_manager_(\d+)$/, async (ctx) => {
+    bot.action(/^verify_manager_(\d+)$/, async (ctx): Promise<boolean> => {
       const id: number = Number(ctx.match[1]);
       const tg = ctx.from;
       const lang = await this.getLang(ctx);
