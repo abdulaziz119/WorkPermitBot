@@ -83,12 +83,14 @@ jobs:
         with:
           ssh-private-key: ${{ secrets.DEPLOY_SSH_KEY }}
 
-      - name: Debug secrets
+      - name: Debug secrets format
         run: |
-          echo "HOST length: ${#DEPLOY_HOST}"
-          echo "USER length: ${#DEPLOY_USER}"
-          echo "HOST starts with: ${DEPLOY_HOST:0:5}"
-          echo "USER starts with: ${DEPLOY_USER:0:5}"
+          echo "DEPLOY_HOST length: ${#DEPLOY_HOST}"
+          echo "DEPLOY_USER length: ${#DEPLOY_USER}" 
+          echo "DEPLOY_HOST first 10 chars: '${DEPLOY_HOST:0:10}'"
+          echo "DEPLOY_USER first 10 chars: '${DEPLOY_USER:0:10}'"
+          echo "DEPLOY_HOST last 5 chars: '...${DEPLOY_HOST: -5}'"
+          echo "Raw connection string would be: ${DEPLOY_USER}@${DEPLOY_HOST}"
         env:
           DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
           DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
@@ -103,6 +105,7 @@ jobs:
 
       - name: Deploy via SSH
         run: |
+          echo "Connecting to: $DEPLOY_USER@$DEPLOY_HOST"
           ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null "$DEPLOY_USER@$DEPLOY_HOST" <<'EOF'
           set -e
           echo "Pulling latest image..."
