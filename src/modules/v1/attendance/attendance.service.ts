@@ -76,7 +76,7 @@ export class AttendanceService {
     if (today.check_out) {
       throw new CodedError('CHECKOUT_ALREADY_DONE');
     }
-  today.check_out = now;
+    today.check_out = now;
     return this.repo.save(today);
   }
 

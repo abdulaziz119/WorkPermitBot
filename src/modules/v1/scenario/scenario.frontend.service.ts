@@ -2,7 +2,7 @@ import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 /* eslint-disable @typescript-eslint/no-unsafe-member-access */
 /* eslint-disable @typescript-eslint/no-unsafe-assignment */
 /* eslint-disable @typescript-eslint/no-unsafe-argument */
-/* eslint-disable @typescript-eslint/no-unsafe-return */
+
 /* eslint-disable no-empty */
 import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { Telegraf, Markup, Context } from 'telegraf';
@@ -170,7 +170,8 @@ const T = {
     approvedByManager: 'Ваш профиль подтверждён менеджером ✅',
     prevBtn: '⬅️ Назад',
     nextBtn: 'Далее ➡️',
-    pageInfo: (current: number, total: number) => `Страница ${current}/${total}`,
+    pageInfo: (current: number, total: number) =>
+      `Страница ${current}/${total}`,
   },
 } as const;
 
@@ -461,10 +462,14 @@ export class ScenarioFrontendService implements OnModuleInit {
       // try clean previous inline keyboard/message
       try {
         await ctx.editMessageReplyMarkup(undefined);
-  } catch { /* ignore */ }
+      } catch {
+        /* ignore */
+      }
       try {
         if ('message' in ctx.callbackQuery) await ctx.deleteMessage();
-  } catch { /* ignore */ }
+      } catch {
+        /* ignore */
+      }
       await ctx.reply(T[lang].checkInDone, this.mainMenu(true, lang));
     });
 
@@ -490,7 +495,9 @@ export class ScenarioFrontendService implements OnModuleInit {
       }
       try {
         await ctx.editMessageReplyMarkup(undefined);
-  } catch { /* ignore */ }
+      } catch {
+        /* ignore */
+      }
       try {
         if ('message' in ctx.callbackQuery) await ctx.deleteMessage();
       } catch {}
@@ -631,7 +638,12 @@ export class ScenarioFrontendService implements OnModuleInit {
           return ctx.reply(T[lang].notVerified);
         }
         const reason = ctx.message.text.trim();
-        const req = await this.requests.createRequest(worker.id, reason, undefined, undefined);
+        const req = await this.requests.createRequest(
+          worker.id,
+          reason,
+          undefined,
+          undefined,
+        );
         ctx.session['awaiting_reason'] = false;
         await ctx.reply(
           T[lang].requestAccepted(req.id),
@@ -649,24 +661,24 @@ export class ScenarioFrontendService implements OnModuleInit {
       const worker = await this.workers.findByTelegramId(tg.id);
       const lang = await this.getLang(ctx);
       if (!worker) return ctx.answerCbQuery(T[lang].notFound);
-      
+
       const page = ctx.match[1] ? Number(ctx.match[1]) : 1;
       const pageSize = 5;
       const allRequests = await this.requests.listByWorker(worker.id);
-      
+
       if (!allRequests.length)
         return this.replyFresh(
           ctx,
           T[lang].noRequests,
           this.backKeyboard(lang),
         );
-      
+
       // Latest requests first (already sorted by created_at DESC from database)
       const totalPages = Math.ceil(allRequests.length / pageSize);
       const startIndex = (page - 1) * pageSize;
       const endIndex = startIndex + pageSize;
       const pageRequests = allRequests.slice(startIndex, endIndex);
-      
+
       const lines = pageRequests
         .map((r) => {
           const statusText = this.statusLabel(lang, String(r.status));
@@ -698,35 +710,35 @@ export class ScenarioFrontendService implements OnModuleInit {
           if (returnDateText) parts.push(returnDateText);
           parts.push(reasonText);
           if (commentText) parts.push(commentText.trim());
-          
+
           return parts.join('\n');
         })
         .join('\n\n');
-      
+
       // Build navigation buttons
       const navButtons = [];
       const pageInfo = T[lang].pageInfo(page, totalPages);
-      
+
       if (page > 1) {
         navButtons.push(
-          Markup.button.callback(T[lang].prevBtn, `my_requests_${page - 1}`)
+          Markup.button.callback(T[lang].prevBtn, `my_requests_${page - 1}`),
         );
       }
-      
+
       if (page < totalPages) {
         navButtons.push(
-          Markup.button.callback(T[lang].nextBtn, `my_requests_${page + 1}`)
+          Markup.button.callback(T[lang].nextBtn, `my_requests_${page + 1}`),
         );
       }
-      
+
       const buttons = [];
       if (navButtons.length > 0) {
         buttons.push(navButtons);
       }
       buttons.push([Markup.button.callback(T[lang].backBtn, 'back_to_menu')]);
-      
+
       const message = `${T[lang].btnMyRequests}\n${pageInfo}\n\n${lines}`;
-      
+
       await this.replyFresh(ctx, message, Markup.inlineKeyboard(buttons));
     });
 
@@ -870,7 +882,9 @@ export class ScenarioFrontendService implements OnModuleInit {
   // --- Reminders ---
   private startReminderLoop() {
     // Tick every 30 seconds (avoid returning promise from interval callback)
-    setInterval(() => { void this.reminderTick(); }, 30_000);
+    setInterval(() => {
+      void this.reminderTick();
+    }, 30_000);
   }
 
   private dateKey(d = new Date()) {
@@ -968,28 +982,33 @@ export class ScenarioFrontendService implements OnModuleInit {
 
       for (const manager of superAdminManagers) {
         const isRu = manager.language === 'ru';
-        
+
         let dateInfo = '';
         let daysInfo = '';
-        
+
         if (approvedDate) {
           const startDate = new Date(approvedDate);
           const startDD = String(startDate.getDate()).padStart(2, '0');
           const startMM = String(startDate.getMonth() + 1).padStart(2, '0');
           const startYYYY = startDate.getFullYear();
-          
+
           if (returnDate) {
             const endDate = new Date(returnDate);
             const endDD = String(endDate.getDate()).padStart(2, '0');
             const endMM = String(endDate.getMonth() + 1).padStart(2, '0');
             const endYYYY = endDate.getFullYear();
-            
+
             // Calculate days between dates
             const timeDiff = endDate.getTime() - startDate.getTime();
             const daysDiff = Math.ceil(timeDiff / (1000 * 3600 * 24));
-            
+
             dateInfo = `📅 ${startDD}.${startMM}.${startYYYY} - ${endDD}.${endMM}.${endYYYY}`;
-            daysInfo = daysDiff > 0 ? (isRu ? `⏱ ${daysDiff} дней` : `⏱ ${daysDiff} kun`) : '';
+            daysInfo =
+              daysDiff > 0
+                ? isRu
+                  ? `⏱ ${daysDiff} дней`
+                  : `⏱ ${daysDiff} kun`
+                : '';
           } else {
             dateInfo = `📅 ${startDD}.${startMM}.${startYYYY}`;
           }
@@ -1004,7 +1023,14 @@ export class ScenarioFrontendService implements OnModuleInit {
         const reasonLine = isRu
           ? `📝 Причина: ${reason}`
           : `📝 Sabab: ${reason}`;
-        const messageText = [header, '', workerLine, dateInfo, daysInfo, reasonLine]
+        const messageText = [
+          header,
+          '',
+          workerLine,
+          dateInfo,
+          daysInfo,
+          reasonLine,
+        ]
           .filter(Boolean)
           .join('\n');
 
