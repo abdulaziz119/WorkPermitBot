@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
+import { Cron } from '@nestjs/schedule';
 import { Telegraf } from 'telegraf';
 import { getBot } from './bot.instance';
 import { RequestsService } from '../requests/requests.service';
@@ -75,8 +76,13 @@ export class ScenarioNotificationService {
   }
 
   private async notifySuperAdminAboutOldResponses(
-    manager: any,
-    oldResponses: any[],
+    manager: { telegram_id: number; language?: string; id?: number },
+    oldResponses: Array<{
+      worker?: { fullname?: string };
+      worker_id: number;
+      updated_at: string | Date;
+      status: RequestsStatusEnum;
+    }>,
     daysThreshold?: number,
   ): Promise<void> {
     try {
@@ -166,7 +172,7 @@ export class ScenarioNotificationService {
       }
 
       await this.bot.telegram.sendMessage(manager.telegram_id, messageText);
-    } catch (error) {
+  } catch (error: any) {
       this.logger.warn(
         `Could not notify super admin ${manager.id}:`,
         error.message,
@@ -208,7 +214,7 @@ export class ScenarioNotificationService {
       }
 
       return `${superAdminManagers.length} ta super admin ga ${daysThreshold} kundan ortiq eski ${oldResponses.length} ta javob haqida xabar yuborildi`;
-    } catch (error) {
+  } catch (error: any) {
       this.logger.error('Manual check error:', error);
       return `Xatolik: ${error.message}`;
     }

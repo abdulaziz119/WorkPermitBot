@@ -87,10 +87,11 @@ export class RequestsService {
     let startDate: Date;
 
     switch (period) {
-      case 'day':
+      case 'day': {
         startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
         break;
-      case 'week':
+      }
+      case 'week': {
         const startOfWeek = new Date(now);
         startOfWeek.setDate(now.getDate() - now.getDay());
         startDate = new Date(
@@ -99,12 +100,18 @@ export class RequestsService {
           startOfWeek.getDate(),
         );
         break;
-      case 'month':
+      }
+      case 'month': {
         startDate = new Date(now.getFullYear(), now.getMonth(), 1);
         break;
-      case 'year':
+      }
+      case 'year': {
         startDate = new Date(now.getFullYear(), 0, 1);
         break;
+      }
+      default: {
+        startDate = new Date(0);
+      }
     }
 
     return this.repo
