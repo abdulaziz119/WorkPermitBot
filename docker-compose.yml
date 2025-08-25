@@ -30,12 +30,14 @@ services:
   app:
     # Agar CI image push qilsa shu variant (tavsiya):
     image: ghcr.io/abdulaziz119/workpermit-bot:latest
+  # Har ishga tushganda yangi qatlamni tekshirish uchun (compose plugin qo'llab-quvvatlasa):
+  # pull_policy: always   # Agar Compose versiyangiz qo'llamasa shu qatorni komment qoldiring
     # Agar lokal build kerak bo'lsa yuqoridagini o'chirib, quyidagilarni uncomment qiling:
     # build:
     #   context: .
     #   dockerfile: Dockerfile
     #   target: production
-    depends_on:
+  depends_on:
       postgres:
         condition: service_healthy
   # redis shart emas; faqat profil yoqsangiz ishga tushadi (qarang redis service)
@@ -65,6 +67,10 @@ services:
       timeout: 10s
       retries: 3
       start_period: 40s
+
+  # Agar avtomatik yangilash uchun watchtower ishlatmoqchi bo'lsangiz (hozir ishlatilmaydi):
+  # labels:
+  #   - "com.centurylinklabs.watchtower.enable=true"
 
   redis:
     image: redis:7-alpine
