@@ -6,6 +6,7 @@ import { ManagersService } from '../managers/managers.service';
 import { RequestsService } from '../requests/requests.service';
 import { AttendanceService } from '../attendance/attendance.service';
 import { UserRoleEnum } from '../../../utils/enum/user.enum';
+import { APP_TIMEZONE, REMINDER_CHECKIN_HH, REMINDER_CHECKIN_MM, REMINDER_CHECKOUT_HH, REMINDER_CHECKOUT_MM } from '../../../utils/env/env';
 
 type Ctx = Context & { session?: Record<string, any> };
 
@@ -910,7 +911,8 @@ export class ScenarioFrontendService implements OnModuleInit {
   }
 
   private async reminderTick() {
-    const now = new Date();
+    // Generate current time in configured timezone to avoid server TZ drift
+    const now = new Date(new Date().toLocaleString('en-US', { timeZone: APP_TIMEZONE }));
     const key = this.dateKey(now);
     if (key !== this.reminderState.lastDateKey) {
       this.reminderState.lastDateKey = key;
@@ -921,13 +923,13 @@ export class ScenarioFrontendService implements OnModuleInit {
     const hh = now.getHours();
     const mm = now.getMinutes();
 
-    // 08:40 check-in reminder
-    if (hh === 8 && mm === 40) {
+  // Configured check-in reminder
+  if (hh === REMINDER_CHECKIN_HH && mm === REMINDER_CHECKIN_MM) {
       await this.sendCheckInReminders();
     }
 
-    // 17:59 check-out reminder
-    if (hh === 17 && mm === 59) {
+  // Configured check-out reminder
+  if (hh === REMINDER_CHECKOUT_HH && mm === REMINDER_CHECKOUT_MM) {
       await this.sendCheckOutReminders();
     }
   }

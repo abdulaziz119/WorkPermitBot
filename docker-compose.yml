@@ -1,27 +1,4 @@
 services:
-  # PostgreSQL Database
-  postgres:
-    image: postgres:15-alpine
-    container_name: workpermit_postgres
-    restart: unless-stopped
-    environment:
-      POSTGRES_DB: ${DB_NAME:-workpermit_db}
-      POSTGRES_USER: ${DB_USER:-postgres}
-      POSTGRES_PASSWORD: ${DB_PASSWORD:-postgres123}
-      PGDATA: /var/lib/postgresql/data/pgdata
-    ports:
-      - "${DB_PORT:-5432}:5432"
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-      - ./init.sql:/docker-entrypoint-initdb.d/init.sql:ro
-    networks:
-      - workpermit_network
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-postgres} -d ${DB_NAME:-workpermit_db}"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-
   # NestJS Application
   app:
     build:
@@ -32,8 +9,8 @@ services:
     restart: unless-stopped
     environment:
       NODE_ENV: production
-      DB_HOST: postgres
-      DB_PORT: 5432
+      DB_HOST: ${DB_HOST}
+      DB_PORT: ${DB_PORT:-5432}
       DB_NAME: ${DB_NAME:-workpermit_db}
       DB_USER: ${DB_USER:-postgres}
       DB_PASSWORD: ${DB_PASSWORD:-postgres123}
@@ -41,9 +18,6 @@ services:
       DB_SCHEMA: ${DB_SCHEMA:-public}
     ports:
       - "${APP_PORT:-3000}:3000"
-    depends_on:
-      postgres:
-        condition: service_healthy
     networks:
       - workpermit_network
     volumes:
@@ -54,10 +28,6 @@ services:
       timeout: 10s
       retries: 3
       start_period: 40s
-
-volumes:
-  postgres_data:
-    driver: local
 
 networks:
   workpermit_network:

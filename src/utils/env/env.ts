@@ -12,6 +12,13 @@ const TELEGRAM_BOT_TOKEN = process.env.BOT_TOKEN || '';
 
 const PORT = process.env.PORT || 3000;
 
+// Optional reminder schedule (Uzbekistan time default)
+const REMINDER_CHECKIN_HH = parseInt(process.env.REMINDER_CHECKIN_HH || '8', 10);
+const REMINDER_CHECKIN_MM = parseInt(process.env.REMINDER_CHECKIN_MM || '0', 10);
+const REMINDER_CHECKOUT_HH = parseInt(process.env.REMINDER_CHECKOUT_HH || '18', 10);
+const REMINDER_CHECKOUT_MM = parseInt(process.env.REMINDER_CHECKOUT_MM || '0', 10);
+const APP_TIMEZONE = process.env.APP_TIMEZONE || 'Asia/Tashkent';
+
 if (!DB_SCHEMA || !DB_HOST || !DB_USER || !DB_DB || !DB_PASS) {
   throw new Error('Database environment variables are not set');
 }
@@ -25,4 +32,9 @@ export {
   DB_USER,
   DB_DB,
   DB_PASS,
+  REMINDER_CHECKIN_HH,
+  REMINDER_CHECKIN_MM,
+  REMINDER_CHECKOUT_HH,
+  REMINDER_CHECKOUT_MM,
+  APP_TIMEZONE,
 };
