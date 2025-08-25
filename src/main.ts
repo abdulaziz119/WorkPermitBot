@@ -15,6 +15,5 @@ async function bootstrap() {
 
   await app.listen(PORT);
 }
-//test
 
 bootstrap().then(() => 'connected');
