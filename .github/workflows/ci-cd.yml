@@ -78,10 +78,63 @@ jobs:
     runs-on: ubuntu-latest
     environment: production
     steps:
-      - name: Deployment notification
+      - name: Add SSH key
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.DEPLOY_SSH_KEY }}
+
+      - name: Debug secrets format
         run: |
-          echo "Docker image pushed to ghcr.io/${{ github.repository_owner }}/workpermit-bot:latest"
-          echo "Server should pull this image automatically via cron or webhook"
+          echo "DEPLOY_HOST length: ${#DEPLOY_HOST}"
+          echo "DEPLOY_USER length: ${#DEPLOY_USER}" 
+          echo "DEPLOY_HOST first 10 chars: '${DEPLOY_HOST:0:10}'"
+          echo "DEPLOY_USER first 10 chars: '${DEPLOY_USER:0:10}'"
+          echo "DEPLOY_HOST last 5 chars: '...${DEPLOY_HOST: -5}'"
+          echo "Raw connection string would be: ${DEPLOY_USER}@${DEPLOY_HOST}"
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+
+      - name: Known hosts
+        run: |
+          mkdir -p ~/.ssh
+          # Try to get host key, fallback to StrictHostKeyChecking=no
+          ssh-keyscan -T 10 -H "$DEPLOY_HOST" >> ~/.ssh/known_hosts 2>/dev/null || echo "Using StrictHostKeyChecking=no"
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+
+      - name: Deploy via SSH
+        run: |
+          echo "Connecting to: $DEPLOY_USER@$DEPLOY_HOST"
+          ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null "$DEPLOY_USER@$DEPLOY_HOST" <<'EOF'
+          set -e
+          echo "Pulling latest image..."
+          docker pull ghcr.io/${{ github.repository_owner }}/workpermit-bot:latest
+          mkdir -p /srv/workpermit
+          cd /srv/workpermit
+          cat > docker-compose.yml <<'YML'
+          version: '3.8'
+          services:
+            app:
+              image: ghcr.io/${{ github.repository_owner }}/workpermit-bot:latest
+              restart: unless-stopped
+              environment:
+                NODE_ENV: production
+                DB_HOST: ${DB_HOST}
+                DB_PORT: ${DB_PORT}
+                DB_NAME: ${DB_NAME}
+                DB_USER: ${DB_USER}
+                DB_PASSWORD: ${DB_PASSWORD}
+                DB_SCHEMA: ${DB_SCHEMA}
+                BOT_TOKEN: ${BOT_TOKEN}
+              ports:
+                - "3000:3000"
+          YML
+          docker compose up -d
+          EOF
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
 
       - name: Post deploy check
-        run: echo "Image ready for deployment"
+        run: echo "Deployment triggered."
