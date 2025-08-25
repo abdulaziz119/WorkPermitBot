@@ -178,7 +178,7 @@ export class ScenarioDashboardService implements OnModuleInit {
         lang === 'ru' ? 'Главное меню' : 'Asosiy menyu',
         menu,
       );
-    } catch (e) {
+    } catch {
       // ignore navigation errors
     }
   }
@@ -279,8 +279,7 @@ export class ScenarioDashboardService implements OnModuleInit {
           this.backToMenuKeyboard(lang),
         );
 
-      const message = `${T[lang].managerPendingBtn}:\n\n`;
-      for (const r of pending.slice(0, 10)) {
+  for (const r of pending.slice(0, 10)) {
         const workerName = r.worker?.fullname || `Worker ID: ${r.worker_id}`;
         
         // Format dates and calculate days
@@ -483,8 +482,7 @@ export class ScenarioDashboardService implements OnModuleInit {
           this.backToMenuKeyboard(lang),
         );
 
-      const message = `${T[lang].managerUnverifiedBtn}:\n\n`;
-      for (const w of list) {
+  for (const w of list) {
         await ctx.reply(
           `Ishchi: ${w.fullname} (tg:${w.telegram_id})`,
           Markup.inlineKeyboard([

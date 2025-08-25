@@ -920,7 +920,7 @@ export class ScenarioFrontendService implements OnModuleInit {
             .catch(() => void 0);
         }),
       );
-    } catch (e) {
+    } catch {
       this.logger.warn('sendCheckInReminders failed');
     }
   }
@@ -942,7 +942,7 @@ export class ScenarioFrontendService implements OnModuleInit {
             .catch(() => void 0);
         }),
       );
-    } catch (e) {
+    } catch {
       this.logger.warn('sendCheckOutReminders failed');
     }
   }
