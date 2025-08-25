@@ -41,7 +41,8 @@ docker run -d --name "$NAME" \
   -e NODE_ENV=production \
   -e APP_PORT=${APP_PORT:-3000} \
   -e TZ=${TZ:-Asia/Tashkent} \
-  -e BOT_TOKEN="$BOT_TOKEN" \
+  -e TELEGRAM_BOT_TOKEN="${TELEGRAM_BOT_TOKEN:-$BOT_TOKEN}" \
+  -e BOT_TOKEN="${TELEGRAM_BOT_TOKEN:-$BOT_TOKEN}" \
   -p 3000:3000 \
   "$IMAGE"
 
