@@ -6,7 +6,17 @@ import { ManagersService } from '../managers/managers.service';
 import { RequestsService } from '../requests/requests.service';
 import { AttendanceService } from '../attendance/attendance.service';
 import { UserRoleEnum } from '../../../utils/enum/user.enum';
-import { APP_TIMEZONE, REMINDER_CHECKIN_HH, REMINDER_CHECKIN_MM, REMINDER_CHECKOUT_HH, REMINDER_CHECKOUT_MM } from '../../../utils/env/env';
+import {
+  APP_TIMEZONE,
+  REMINDER_CHECKIN_HH,
+  REMINDER_CHECKIN_MM,
+  REMINDER_CHECKOUT_HH,
+  REMINDER_CHECKOUT_MM,
+} from '../../../utils/env/env';
+import { WorkerEntity } from '../../../entity/workers.entity';
+import { ManagerEntity } from '../../../entity/managers.entity';
+import { RequestEntity } from '../../../entity/requests.entity';
+import { AttendanceEntity } from '../../../entity/attendance.entity';
 
 type Ctx = Context & { session?: Record<string, any> };
 
@@ -124,8 +134,7 @@ const T = {
     statusRejected: 'Не одобрено',
     pastDateNotAllowed:
       'Нельзя выбрать прошедшую дату. Введите сегодняшнюю или будущую.',
-    returnBeforeApproved:
-      'Дата возвращения не может быть раньше даты отгула.',
+    returnBeforeApproved: 'Дата возвращения не может быть раньше даты отгула.',
     notVerified: 'Вы ещё не подтверждены',
     checkInDone: 'Check-in записан ✅',
     checkOutDone: 'Check-out записан 🕘',
@@ -173,7 +182,8 @@ const T = {
     approvedByManager: 'Ваш профиль подтверждён менеджером ✅',
     prevBtn: '⬅️ Назад',
     nextBtn: 'Далее ➡️',
-    pageInfo: (current: number, total: number) => `Страница ${current}/${total}`,
+    pageInfo: (current: number, total: number) =>
+      `Страница ${current}/${total}`,
   },
 } as const;
 
@@ -206,11 +216,11 @@ export class ScenarioFrontendService implements OnModuleInit {
     // prefer session
     const sessLang = ctx.session?.lang as Lang | undefined;
     if (sessLang) return sessLang;
-    const tgId = Number(ctx.from?.id);
+    const tgId: number = Number(ctx.from?.id);
     if (tgId) {
-      const w = await this.workers.findByTelegramId(tgId);
+      const w: WorkerEntity = await this.workers.findByTelegramId(tgId);
       if (w?.language) return w.language as Lang;
-      const m = await this.managers.findByTelegramId(tgId);
+      const m: ManagerEntity = await this.managers.findByTelegramId(tgId);
       if (m?.language) return m.language as Lang;
     }
     return 'uz';
@@ -265,13 +275,13 @@ export class ScenarioFrontendService implements OnModuleInit {
   }
 
   private parseDayMonth(input: string): Date | null {
-    const cleaned = (input || '').trim();
+    const cleaned: string = (input || '').trim();
     const m = cleaned.match(/^(\d{1,2})[./-](\d{1,2})(?:[./-](\d{2,4}))?$/);
     if (!m) return null;
-    const d = Number(m[1]);
-    const mo = Number(m[2]);
+    const d: number = Number(m[1]);
+    const mo: number = Number(m[2]);
     const now = new Date();
-    const y = m[3]
+    const y: number = m[3]
       ? Number(m[3].length === 2 ? '20' + m[3] : m[3])
       : now.getFullYear();
     if (mo < 1 || mo > 12 || d < 1 || d > 31) return null;
@@ -295,7 +305,9 @@ export class ScenarioFrontendService implements OnModuleInit {
     }
 
     const tr = T[lang];
-    const isSuperAdmin = await this.managers.isSuperAdmin(manager.telegram_id);
+    const isSuperAdmin: boolean = await this.managers.isSuperAdmin(
+      manager.telegram_id,
+    );
     const menuButtons: any[] = [];
 
     // Pending requests
@@ -337,12 +349,12 @@ export class ScenarioFrontendService implements OnModuleInit {
 
   // manager menu is handled in dashboard service
 
-  private registerHandlers() {
+  private registerHandlers(): void {
     const bot = this.bot;
 
     bot.start(async (ctx) => {
       const tg = ctx.from;
-      const full =
+      const full: string =
         [tg.first_name, tg.last_name].filter(Boolean).join(' ') ||
         tg.username ||
         'User';
@@ -351,8 +363,11 @@ export class ScenarioFrontendService implements OnModuleInit {
       ctx.session.tgId = tg.id;
 
       // If user already exists, skip language/role prompt
-      const existingWorker = await this.workers.findByTelegramId(tg.id);
-      const existingManager = await this.managers.findByTelegramId(tg.id);
+      const existingWorker: WorkerEntity = await this.workers.findByTelegramId(
+        tg.id,
+      );
+      const existingManager: ManagerEntity =
+        await this.managers.findByTelegramId(tg.id);
       if (existingWorker || existingManager) {
         const lang = await this.getLang(ctx);
         ctx.session.lang = lang;
@@ -390,10 +405,10 @@ export class ScenarioFrontendService implements OnModuleInit {
       const tr = T[lang];
 
       // Try update language if user already exists as worker/manager
-      const tgId = Number(ctx.from?.id);
-      const w = await this.workers.findByTelegramId(tgId);
+      const tgId: number = Number(ctx.from?.id);
+      const w: WorkerEntity = await this.workers.findByTelegramId(tgId);
       if (w) await this.workers.setLanguage(tgId, lang);
-      const m = await this.managers.findByTelegramId(tgId);
+      const m: ManagerEntity = await this.managers.findByTelegramId(tgId);
       if (m) await this.managers.setLanguage(tgId, lang);
 
       // Ask role
@@ -412,12 +427,13 @@ export class ScenarioFrontendService implements OnModuleInit {
       ctx.session ??= {};
       const lang: Lang = ctx.session.lang || 'uz';
       const tr = T[lang];
-      const tgId = Number(ctx.from?.id);
-      const isWorker = ctx.match[0] === 'role_worker';
+      const tgId: number = Number(ctx.from?.id);
+      const isWorker: boolean = ctx.match[0] === 'role_worker';
 
       if (isWorker) {
         // Prevent dual creation: if already manager, do not create worker
-        const manager = await this.managers.findByTelegramId(tgId);
+        const manager: ManagerEntity =
+          await this.managers.findByTelegramId(tgId);
         if (manager) {
           await ctx.editMessageText(tr.saved);
           return;
@@ -426,7 +442,7 @@ export class ScenarioFrontendService implements OnModuleInit {
         await ctx.editMessageText(tr.enterFullname);
       } else {
         // Prevent dual creation: if already worker, do not create manager
-        const worker = await this.workers.findByTelegramId(tgId);
+        const worker: WorkerEntity = await this.workers.findByTelegramId(tgId);
         if (worker) {
           await ctx.editMessageText(tr.saved);
           return;
@@ -448,7 +464,7 @@ export class ScenarioFrontendService implements OnModuleInit {
     bot.action('check_in', async (ctx) => {
       const tg = ctx.from;
       const lang = await this.getLang(ctx);
-      const worker = await this.workers.findByTelegramId(tg.id);
+      const worker: WorkerEntity = await this.workers.findByTelegramId(tg.id);
       if (!worker || !worker.is_verified)
         return ctx.answerCbQuery(T[lang].notVerified);
       try {
@@ -474,7 +490,7 @@ export class ScenarioFrontendService implements OnModuleInit {
     bot.action('check_out', async (ctx) => {
       const tg = ctx.from;
       const lang = await this.getLang(ctx);
-      const worker = await this.workers.findByTelegramId(tg.id);
+      const worker: WorkerEntity = await this.workers.findByTelegramId(tg.id);
       if (!worker || !worker.is_verified)
         return ctx.answerCbQuery(T[lang].notVerified);
       try {
@@ -504,7 +520,7 @@ export class ScenarioFrontendService implements OnModuleInit {
     bot.action('request_leave', async (ctx) => {
       const tg = ctx.from;
       const lang = await this.getLang(ctx);
-      const worker = await this.workers.findByTelegramId(tg.id);
+      const worker: WorkerEntity = await this.workers.findByTelegramId(tg.id);
       if (!worker || !worker.is_verified)
         return ctx.answerCbQuery(T[lang].notVerified);
       ctx.session ??= {};
@@ -516,15 +532,19 @@ export class ScenarioFrontendService implements OnModuleInit {
       // Step: collect fullname after role selection
       if (ctx.session?.step === 'await_fullname' && ctx.session?.pending_role) {
         const lang = await this.getLang(ctx);
-        const name = (ctx.message.text || '').trim();
+        const name: string = (ctx.message.text || '').trim();
         if (name.length < 3) {
           await ctx.reply(T[lang].invalidFullname);
           return; // keep waiting for proper fullname
         }
-        const tgId = Number(ctx.from?.id);
+        const tgId: number = Number(ctx.from?.id);
         const role = ctx.session.pending_role as 'worker' | 'manager';
         if (role === 'worker') {
-          const worker = await this.workers.createOrGet(tgId, name, lang);
+          const worker: WorkerEntity = await this.workers.createOrGet(
+            tgId,
+            name,
+            lang,
+          );
           await ctx.reply(T[lang].workerCreated);
           if (!worker.is_verified) {
             await this.notifyManagersNewWorker({
@@ -540,7 +560,7 @@ export class ScenarioFrontendService implements OnModuleInit {
             this.mainMenu(worker.is_verified, lang),
           );
         } else {
-          const manager = await this.managers.createIfNotExists(
+          const manager: ManagerEntity = await this.managers.createIfNotExists(
             tgId,
             name,
             lang,
@@ -568,17 +588,19 @@ export class ScenarioFrontendService implements OnModuleInit {
       const flow = ctx.session?.['req_flow'];
       if (flow?.step === 'await_date') {
         const lang = await this.getLang(ctx);
-        const dt = this.parseDayMonth(ctx.message.text);
+        const dt: Date = this.parseDayMonth(ctx.message.text);
         if (!dt) {
           await ctx.reply(T[lang].invalidDate, this.backKeyboard(lang));
           return; // keep waiting for valid date
         }
         // Prevent selecting past date (compare with today in UTC basis)
         const today = new Date();
-        const todayY = today.getUTCFullYear();
-        const todayM = today.getUTCMonth();
-        const todayD = today.getUTCDate();
-        const dateOnly = new Date(Date.UTC(dt.getUTCFullYear(), dt.getUTCMonth(), dt.getUTCDate()));
+        const todayY: number = today.getUTCFullYear();
+        const todayM: number = today.getUTCMonth();
+        const todayD: number = today.getUTCDate();
+        const dateOnly = new Date(
+          Date.UTC(dt.getUTCFullYear(), dt.getUTCMonth(), dt.getUTCDate()),
+        );
         const todayOnly = new Date(Date.UTC(todayY, todayM, todayD));
         if (dateOnly < todayOnly) {
           await ctx.reply(T[lang].pastDateNotAllowed, this.backKeyboard(lang));
@@ -593,24 +615,43 @@ export class ScenarioFrontendService implements OnModuleInit {
       }
       if (flow?.step === 'await_return_date') {
         const lang = await this.getLang(ctx);
-        const dt = this.parseDayMonth(ctx.message.text);
+        const dt: Date = this.parseDayMonth(ctx.message.text);
         if (!dt) {
           await ctx.reply(T[lang].invalidDate, this.backKeyboard(lang));
           return; // keep waiting for valid return date
         }
         // Validate not past date and not before approved date
-        const approvedDate = flow.approvedDate ? new Date(flow.approvedDate) : null;
+        const approvedDate: Date = flow.approvedDate
+          ? new Date(flow.approvedDate)
+          : null;
         const today = new Date();
-        const dateOnly = new Date(Date.UTC(dt.getUTCFullYear(), dt.getUTCMonth(), dt.getUTCDate()));
-        const todayOnly = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate()));
+        const dateOnly = new Date(
+          Date.UTC(dt.getUTCFullYear(), dt.getUTCMonth(), dt.getUTCDate()),
+        );
+        const todayOnly = new Date(
+          Date.UTC(
+            today.getUTCFullYear(),
+            today.getUTCMonth(),
+            today.getUTCDate(),
+          ),
+        );
         if (dateOnly < todayOnly) {
           await ctx.reply(T[lang].pastDateNotAllowed, this.backKeyboard(lang));
           return; // keep waiting
         }
         if (approvedDate) {
-          const approvedOnly = new Date(Date.UTC(approvedDate.getUTCFullYear(), approvedDate.getUTCMonth(), approvedDate.getUTCDate()));
+          const approvedOnly = new Date(
+            Date.UTC(
+              approvedDate.getUTCFullYear(),
+              approvedDate.getUTCMonth(),
+              approvedDate.getUTCDate(),
+            ),
+          );
           if (dateOnly < approvedOnly) {
-            await ctx.reply(T[lang].returnBeforeApproved, this.backKeyboard(lang));
+            await ctx.reply(
+              T[lang].returnBeforeApproved,
+              this.backKeyboard(lang),
+            );
             return; // keep waiting
           }
         }
@@ -624,20 +665,20 @@ export class ScenarioFrontendService implements OnModuleInit {
       }
       if (flow?.step === 'await_reason') {
         const tg = ctx.from;
-        const worker = await this.workers.findByTelegramId(tg.id);
+        const worker: WorkerEntity = await this.workers.findByTelegramId(tg.id);
         const lang = await this.getLang(ctx);
         if (!worker || !worker.is_verified) {
           ctx.session['req_flow'] = undefined;
           return ctx.reply(T[lang].notVerified);
         }
-        const reason = ctx.message.text.trim();
-        const approvedDate = flow.approvedDate
+        const reason: string = ctx.message.text.trim();
+        const approvedDate: Date = flow.approvedDate
           ? new Date(flow.approvedDate)
           : undefined;
-        const returnDate = flow.returnDate
+        const returnDate: Date = flow.returnDate
           ? new Date(flow.returnDate)
           : undefined;
-        const req = await this.requests.createRequest(
+        const req: RequestEntity = await this.requests.createRequest(
           worker.id,
           reason,
           approvedDate,
@@ -654,14 +695,19 @@ export class ScenarioFrontendService implements OnModuleInit {
       // Legacy single-step fallback
       if (ctx.session?.['awaiting_reason']) {
         const tg = ctx.from;
-        const worker = await this.workers.findByTelegramId(tg.id);
+        const worker: WorkerEntity = await this.workers.findByTelegramId(tg.id);
         const lang = await this.getLang(ctx);
         if (!worker || !worker.is_verified) {
           ctx.session['awaiting_reason'] = false;
           return ctx.reply(T[lang].notVerified);
         }
-        const reason = ctx.message.text.trim();
-        const req = await this.requests.createRequest(worker.id, reason, undefined, undefined);
+        const reason: string = ctx.message.text.trim();
+        const req: RequestEntity = await this.requests.createRequest(
+          worker.id,
+          reason,
+          undefined,
+          undefined,
+        );
         ctx.session['awaiting_reason'] = false;
         await ctx.reply(
           T[lang].requestAccepted(req.id),
@@ -676,94 +722,99 @@ export class ScenarioFrontendService implements OnModuleInit {
     // Worker: list my requests with pagination
     bot.action(/^my_requests(?:_(\d+))?$/, async (ctx) => {
       const tg = ctx.from;
-      const worker = await this.workers.findByTelegramId(tg.id);
+      const worker: WorkerEntity = await this.workers.findByTelegramId(tg.id);
       const lang = await this.getLang(ctx);
       if (!worker) return ctx.answerCbQuery(T[lang].notFound);
-      
-      const page = ctx.match[1] ? Number(ctx.match[1]) : 1;
+
+      const page: number = ctx.match[1] ? Number(ctx.match[1]) : 1;
       const pageSize = 5;
-      const allRequests = await this.requests.listByWorker(worker.id);
-      
+      const allRequests: RequestEntity[] = await this.requests.listByWorker(
+        worker.id,
+      );
+
       if (!allRequests.length)
         return this.replyFresh(
           ctx,
           T[lang].noRequests,
           this.backKeyboard(lang),
         );
-      
+
       // Latest requests first (already sorted by created_at DESC from database)
-      const totalPages = Math.ceil(allRequests.length / pageSize);
-      const startIndex = (page - 1) * pageSize;
-      const endIndex = startIndex + pageSize;
-      const pageRequests = allRequests.slice(startIndex, endIndex);
-      
-      const lines = pageRequests
-        .map((r) => {
-          const statusText = this.statusLabel(lang, String(r.status));
-          const dateText = r.approved_date
-            ? (() => {
+      const totalPages: number = Math.ceil(allRequests.length / pageSize);
+      const startIndex: number = (page - 1) * pageSize;
+      const endIndex: number = startIndex + pageSize;
+      const pageRequests: RequestEntity[] = allRequests.slice(
+        startIndex,
+        endIndex,
+      );
+
+      const lines: string = pageRequests
+        .map((r: RequestEntity): string => {
+          const statusText: string = this.statusLabel(lang, String(r.status));
+          const dateText: string = r.approved_date
+            ? ((): string => {
                 const d = new Date(r.approved_date);
-                const dd = String(d.getUTCDate()).padStart(2, '0');
-                const mm = String(d.getUTCMonth() + 1).padStart(2, '0');
-                const yyyy = d.getUTCFullYear();
+                const dd: string = String(d.getUTCDate()).padStart(2, '0');
+                const mm: string = String(d.getUTCMonth() + 1).padStart(2, '0');
+                const yyyy:number = d.getUTCFullYear();
                 return `📅 ${dd}.${mm}.${yyyy}`;
               })()
             : '';
-          const returnDateText = r.return_date
-            ? (() => {
+          const returnDateText: string = r.return_date
+            ? ((): string => {
                 const d = new Date(r.return_date);
-                const dd = String(d.getUTCDate()).padStart(2, '0');
-                const mm = String(d.getUTCMonth() + 1).padStart(2, '0');
-                const yyyy = d.getUTCFullYear();
+                const dd: string = String(d.getUTCDate()).padStart(2, '0');
+                const mm: string = String(d.getUTCMonth() + 1).padStart(2, '0');
+                const yyyy: number = d.getUTCFullYear();
                 return `🔄 ${dd}.${mm}.${yyyy}`;
               })()
             : '';
           const reasonText = `📝 ${r.reason}`;
-          const commentText = r.manager_comment
+          const commentText: string = r.manager_comment
             ? `\n${T[lang].commentLabel}: ${r.manager_comment}`
             : '';
 
-          const parts = [`#${r.id} • ${statusText}`];
+          const parts: string[] = [`#${r.id} • ${statusText}`];
           if (dateText) parts.push(dateText);
           if (returnDateText) parts.push(returnDateText);
           parts.push(reasonText);
           if (commentText) parts.push(commentText.trim());
-          
+
           return parts.join('\n');
         })
         .join('\n\n');
-      
+
       // Build navigation buttons
       const navButtons = [];
-      const pageInfo = T[lang].pageInfo(page, totalPages);
-      
+      const pageInfo: string = T[lang].pageInfo(page, totalPages);
+
       if (page > 1) {
         navButtons.push(
-          Markup.button.callback(T[lang].prevBtn, `my_requests_${page - 1}`)
+          Markup.button.callback(T[lang].prevBtn, `my_requests_${page - 1}`),
         );
       }
-      
+
       if (page < totalPages) {
         navButtons.push(
-          Markup.button.callback(T[lang].nextBtn, `my_requests_${page + 1}`)
+          Markup.button.callback(T[lang].nextBtn, `my_requests_${page + 1}`),
         );
       }
-      
+
       const buttons = [];
       if (navButtons.length > 0) {
         buttons.push(navButtons);
       }
       buttons.push([Markup.button.callback(T[lang].backBtn, 'back_to_menu')]);
-      
+
       const message = `${T[lang].btnMyRequests}\n${pageInfo}\n\n${lines}`;
-      
+
       await this.replyFresh(ctx, message, Markup.inlineKeyboard(buttons));
     });
 
     // Back to main menu from lists
     bot.action('back_to_menu', async (ctx) => {
       const lang = await this.getLang(ctx);
-      const tgId = Number(ctx.from?.id);
+      const tgId: number = Number(ctx.from?.id);
       // Clear any pending flows (date/reason etc.)
       if (ctx.session) {
         ctx.session['req_flow'] = undefined;
@@ -771,9 +822,9 @@ export class ScenarioFrontendService implements OnModuleInit {
         ctx.session['step'] = undefined;
         ctx.session['pending_role'] = undefined;
       }
-      const worker = await this.workers.findByTelegramId(tgId);
-      const isVerified = !!worker?.is_verified;
-      const text = worker
+      const worker: WorkerEntity = await this.workers.findByTelegramId(tgId);
+      const isVerified: boolean = !!worker?.is_verified;
+      const text: string = worker
         ? isVerified
           ? T[lang].greetingVerified(worker.fullname)
           : T[lang].greetingPending(worker.fullname)
@@ -785,10 +836,10 @@ export class ScenarioFrontendService implements OnModuleInit {
 
   private async notifyManagersByLang(messageUz: string, messageRu: string) {
     try {
-      const managers = await this.managers.listActive();
+      const managers: ManagerEntity[] = await this.managers.listActive();
       await Promise.all(
-        managers.map((m) => {
-          const msg = m.language === 'ru' ? messageRu : messageUz;
+        managers.map((m: ManagerEntity) => {
+          const msg: string = m.language === 'ru' ? messageRu : messageUz;
           return this.bot.telegram
             .sendMessage(m.telegram_id, msg)
             .catch((e) =>
@@ -807,12 +858,14 @@ export class ScenarioFrontendService implements OnModuleInit {
     telegram_id: number;
   }) {
     try {
-      const managers = await this.managers.listActive();
+      const managers: ManagerEntity[] = await this.managers.listActive();
 
       // Faqat admin roli bilan managerlarni filter qilish
       const adminManagers = [];
       for (const manager of managers) {
-        const isAdminManager = await this.managers.isAdmin(manager.telegram_id);
+        const isAdminManager: boolean = await this.managers.isAdmin(
+          manager.telegram_id,
+        );
         if (isAdminManager) {
           adminManagers.push(manager);
         }
@@ -820,7 +873,7 @@ export class ScenarioFrontendService implements OnModuleInit {
 
       await Promise.all(
         adminManagers.map(async (m) => {
-          const text =
+          const text: string =
             m.language === 'ru'
               ? `Новый работник: ${worker.fullname} (tg:${worker.telegram_id}). Требуется подтверждение.`
               : `Yangi ishchi: ${worker.fullname} (tg:${worker.telegram_id}). Tasdiqlash kerak.`;
@@ -856,10 +909,11 @@ export class ScenarioFrontendService implements OnModuleInit {
     language: 'uz' | 'ru';
   }) {
     try {
-      const superAdmins = await this.managers.listSuperAdmins();
+      const superAdmins: ManagerEntity[] =
+        await this.managers.listSuperAdmins();
       await Promise.all(
-        superAdmins.map(async (admin) => {
-          const text =
+        superAdmins.map(async (admin: ManagerEntity) => {
+          const text: string =
             admin.language === 'ru'
               ? `Новый менеджер: ${manager.fullname} (tg:${manager.telegram_id}). Выберите роль:`
               : `Yangi menejer: ${manager.fullname} (tg:${manager.telegram_id}). Rolni tanlang:`;
@@ -904,50 +958,54 @@ export class ScenarioFrontendService implements OnModuleInit {
   }
 
   private dateKey(d = new Date()) {
-    const y = d.getFullYear();
-    const m = String(d.getMonth() + 1).padStart(2, '0');
-    const day = String(d.getDate()).padStart(2, '0');
+    const y: number = d.getFullYear();
+    const m: string = String(d.getMonth() + 1).padStart(2, '0');
+    const day: string = String(d.getDate()).padStart(2, '0');
     return `${y}-${m}-${day}`;
   }
 
   private async reminderTick() {
     // Generate current time in configured timezone to avoid server TZ drift
-    const now = new Date(new Date().toLocaleString('en-US', { timeZone: APP_TIMEZONE }));
-    const key = this.dateKey(now);
+    const now = new Date(
+      new Date().toLocaleString('en-US', { timeZone: APP_TIMEZONE }),
+    );
+    const key: string = this.dateKey(now);
     if (key !== this.reminderState.lastDateKey) {
       this.reminderState.lastDateKey = key;
       this.reminderState.doneMorning.clear();
       this.reminderState.doneEvening.clear();
     }
 
-    const hh = now.getHours();
-    const mm = now.getMinutes();
+    const hh: number = now.getHours();
+    const mm: number = now.getMinutes();
 
-  // Configured check-in reminder
-  if (hh === REMINDER_CHECKIN_HH && mm === REMINDER_CHECKIN_MM) {
+    // Configured check-in reminder
+    if (hh === REMINDER_CHECKIN_HH && mm === REMINDER_CHECKIN_MM) {
       await this.sendCheckInReminders();
     }
 
-  // Configured check-out reminder
-  if (hh === REMINDER_CHECKOUT_HH && mm === REMINDER_CHECKOUT_MM) {
+    // Configured check-out reminder
+    if (hh === REMINDER_CHECKOUT_HH && mm === REMINDER_CHECKOUT_MM) {
       await this.sendCheckOutReminders();
     }
   }
 
   private async sendCheckInReminders() {
     try {
-      const workers = await this.workers.listVerified();
+      const workers: WorkerEntity[] = await this.workers.listVerified();
       if (!workers.length) return;
-      const workerIds = workers.map((w) => w.id);
+      const workerIds: number[] = workers.map((w) => w.id);
       const todayMap = await this.attendance.getTodayForWorkers(workerIds);
-      const now = new Date(new Date().toLocaleString('en-US', { timeZone: APP_TIMEZONE }));
+      const now = new Date(
+        new Date().toLocaleString('en-US', { timeZone: APP_TIMEZONE }),
+      );
 
       await Promise.all(
-        workers.map(async (w) => {
+        workers.map(async (w: WorkerEntity) => {
           if (this.reminderState.doneMorning.has(w.telegram_id)) return;
-          const rec = todayMap.get(w.id);
+          const rec: AttendanceEntity = todayMap.get(w.id);
           // Skip if already checked in
-            if (rec?.check_in) return;
+          if (rec?.check_in) return;
           const lang: Lang = (w.language as any) || 'uz';
           const text =
             lang === 'ru'
@@ -966,14 +1024,14 @@ export class ScenarioFrontendService implements OnModuleInit {
 
   private async sendCheckOutReminders() {
     try {
-      const workers = await this.workers.listVerified();
+      const workers: WorkerEntity[] = await this.workers.listVerified();
       if (!workers.length) return;
-      const workerIds = workers.map((w) => w.id);
+      const workerIds: number[] = workers.map((w) => w.id);
       const todayMap = await this.attendance.getTodayForWorkers(workerIds);
       await Promise.all(
-        workers.map(async (w) => {
+        workers.map(async (w: WorkerEntity) => {
           if (this.reminderState.doneEvening.has(w.telegram_id)) return;
-          const rec = todayMap.get(w.id);
+          const rec: AttendanceEntity = todayMap.get(w.id);
           // Send only if has check_in but no check_out yet
           if (!rec?.check_in || rec.check_out) return;
           const lang: Lang = (w.language as any) || 'uz';
@@ -999,42 +1057,55 @@ export class ScenarioFrontendService implements OnModuleInit {
     reason: string,
   ): Promise<void> {
     try {
-      const managers = await this.managers.listActive();
+      const managers: ManagerEntity[] = await this.managers.listActive();
 
       // Faqat super admin rolega ega managerlarni filtrlash
-      const superAdminManagers = managers.filter(
-        (manager) => manager.role === UserRoleEnum.SUPER_ADMIN,
+      const superAdminManagers: ManagerEntity[] = managers.filter(
+        (manager: ManagerEntity): boolean =>
+          manager.role === UserRoleEnum.SUPER_ADMIN,
       );
 
       // Load request to access approved_date and return_date
-      const request = await this.requests.findByIdWithWorker(requestId);
+      const request: RequestEntity =
+        await this.requests.findByIdWithWorker(requestId);
       const approvedDate: Date | null = request?.approved_date || null;
       const returnDate: Date | null = request?.return_date || null;
 
       for (const manager of superAdminManagers) {
-        const isRu = manager.language === 'ru';
-        
-        let dateInfo = '';
-        let daysInfo = '';
-        
+        const isRu: boolean = manager.language === 'ru';
+
+        let dateInfo: string = '';
+        let daysInfo: string = '';
+
         if (approvedDate) {
           const startDate = new Date(approvedDate);
-          const startDD = String(startDate.getDate()).padStart(2, '0');
-          const startMM = String(startDate.getMonth() + 1).padStart(2, '0');
-          const startYYYY = startDate.getFullYear();
-          
+          const startDD: string = String(startDate.getDate()).padStart(2, '0');
+          const startMM: string = String(startDate.getMonth() + 1).padStart(
+            2,
+            '0',
+          );
+          const startYYYY: number = startDate.getFullYear();
+
           if (returnDate) {
             const endDate = new Date(returnDate);
-            const endDD = String(endDate.getDate()).padStart(2, '0');
-            const endMM = String(endDate.getMonth() + 1).padStart(2, '0');
-            const endYYYY = endDate.getFullYear();
-            
+            const endDD: string = String(endDate.getDate()).padStart(2, '0');
+            const endMM: string = String(endDate.getMonth() + 1).padStart(
+              2,
+              '0',
+            );
+            const endYYYY: number = endDate.getFullYear();
+
             // Calculate days between dates
-            const timeDiff = endDate.getTime() - startDate.getTime();
-            const daysDiff = Math.ceil(timeDiff / (1000 * 3600 * 24));
-            
+            const timeDiff: number = endDate.getTime() - startDate.getTime();
+            const daysDiff: number = Math.ceil(timeDiff / (1000 * 3600 * 24));
+
             dateInfo = `📅 ${startDD}.${startMM}.${startYYYY} - ${endDD}.${endMM}.${endYYYY}`;
-            daysInfo = daysDiff > 0 ? (isRu ? `⏱ ${daysDiff} дней` : `⏱ ${daysDiff} kun`) : '';
+            daysInfo =
+              daysDiff > 0
+                ? isRu
+                  ? `⏱ ${daysDiff} дней`
+                  : `⏱ ${daysDiff} kun`
+                : '';
           } else {
             dateInfo = `📅 ${startDD}.${startMM}.${startYYYY}`;
           }
@@ -1043,13 +1114,20 @@ export class ScenarioFrontendService implements OnModuleInit {
         const header = isRu
           ? '🔔 Новый запрос на отгул!'
           : "🔔 Yangi ruxsat so'rovi!";
-        const workerLine = isRu
+        const workerLine: string = isRu
           ? `👤 Сотрудник: ${worker.fullname}`
           : `👤 Ishchi: ${worker.fullname}`;
-        const reasonLine = isRu
+        const reasonLine: string = isRu
           ? `📝 Причина: ${reason}`
           : `📝 Sabab: ${reason}`;
-        const messageText = [header, '', workerLine, dateInfo, daysInfo, reasonLine]
+        const messageText: string = [
+          header,
+          '',
+          workerLine,
+          dateInfo,
+          daysInfo,
+          reasonLine,
+        ]
           .filter(Boolean)
           .join('\n');
 
