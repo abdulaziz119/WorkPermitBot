@@ -1,9 +1,13 @@
 version: "3.9"
 
+# NOTE:
+# - container_name entries removed to avoid name conflicts when manually running containers.
+# - Use service name 'postgres' as DB_HOST inside the app.
+# - Ensure .env file (same directory) provides DB_NAME / DB_USER / DB_PASSWORD etc.
+
 services:
   postgres:
     image: postgres:15-alpine
-    container_name: workpermit_postgres
     restart: unless-stopped
     environment:
       POSTGRES_DB: ${DB_NAME:-workpermit_db}
@@ -31,16 +35,16 @@ services:
     #   context: .
     #   dockerfile: Dockerfile
     #   target: production
-    container_name: workpermit_app
     depends_on:
       postgres:
         condition: service_healthy
-      redis:
-        condition: service_started
+  # redis shart emas; faqat profil yoqsangiz ishga tushadi (qarang redis service)
+  # redis:
+  #   condition: service_started
     restart: unless-stopped
     env_file: .env
     environment:
-      DB_HOST: postgres
+      DB_HOST: postgres               # Service name resolves via compose DNS
       DB_NAME: ${DB_NAME:-workpermit_db}
       DB_USER: ${DB_USER:-postgres}
       DB_PASSWORD: ${DB_PASSWORD:-postgres123}
@@ -64,9 +68,9 @@ services:
 
   redis:
     image: redis:7-alpine
-    container_name: workpermit_redis
     restart: unless-stopped
     command: redis-server --appendonly yes
+    profiles: ["redis"]          # Run only if: docker compose --profile redis up -d
     ports:
       - "${REDIS_PORT:-6379}:6379"
     volumes:
