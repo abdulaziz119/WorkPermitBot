@@ -1,5 +1,4 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { Cron, CronExpression } from '@nestjs/schedule';
 import { Cron } from '@nestjs/schedule';
 import { Telegraf } from 'telegraf';
 import { getBot } from './bot.instance';
@@ -172,7 +171,7 @@ export class ScenarioNotificationService {
       }
 
       await this.bot.telegram.sendMessage(manager.telegram_id, messageText);
-  } catch (error: any) {
+    } catch (error: any) {
       this.logger.warn(
         `Could not notify super admin ${manager.id}:`,
         error.message,
@@ -214,7 +213,7 @@ export class ScenarioNotificationService {
       }
 
       return `${superAdminManagers.length} ta super admin ga ${daysThreshold} kundan ortiq eski ${oldResponses.length} ta javob haqida xabar yuborildi`;
-  } catch (error: any) {
+    } catch (error: any) {
       this.logger.error('Manual check error:', error);
       return `Xatolik: ${error.message}`;
     }
