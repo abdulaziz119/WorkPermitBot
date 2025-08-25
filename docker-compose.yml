@@ -55,28 +55,8 @@ services:
       retries: 3
       start_period: 40s
 
-  # Redis for session storage (optional)
-  redis:
-    image: redis:7-alpine
-    container_name: workpermit_redis
-    restart: unless-stopped
-    command: redis-server --appendonly yes
-    ports:
-      - "${REDIS_PORT:-6379}:6379"
-    volumes:
-      - redis_data:/data
-    networks:
-      - workpermit_network
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-
 volumes:
   postgres_data:
-    driver: local
-  redis_data:
     driver: local
 
 networks:
