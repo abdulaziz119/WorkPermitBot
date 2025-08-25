@@ -38,6 +38,10 @@ const T = {
     statusPending: 'Kutilmoqda',
     statusApproved: 'Ruxsat',
     statusRejected: 'Javob berilmadi',
+    pastDateNotAllowed:
+      "O'tib ketgan kunni tanlab bo'lmaydi. Bugungi yoki kelajakdagi sanani kiriting.",
+    returnBeforeApproved:
+      'Qaytish sanasi ruxsat olingan sanadan oldin boʼlishi mumkin emas.',
     notVerified: 'Siz hali tasdiqlanmagansiz',
     checkInDone: 'Check-in qayd etildi ✅',
     checkOutDone: 'Check-out qayd etildi 🕘',
@@ -117,6 +121,10 @@ const T = {
     statusPending: 'В ожидании',
     statusApproved: 'Одобрено',
     statusRejected: 'Не одобрено',
+    pastDateNotAllowed:
+      'Нельзя выбрать прошедшую дату. Введите сегодняшнюю или будущую.',
+    returnBeforeApproved:
+      'Дата возвращения не может быть раньше даты отгула.',
     notVerified: 'Вы ещё не подтверждены',
     checkInDone: 'Check-in записан ✅',
     checkOutDone: 'Check-out записан 🕘',
@@ -564,6 +572,17 @@ export class ScenarioFrontendService implements OnModuleInit {
           await ctx.reply(T[lang].invalidDate, this.backKeyboard(lang));
           return; // keep waiting for valid date
         }
+        // Prevent selecting past date (compare with today in UTC basis)
+        const today = new Date();
+        const todayY = today.getUTCFullYear();
+        const todayM = today.getUTCMonth();
+        const todayD = today.getUTCDate();
+        const dateOnly = new Date(Date.UTC(dt.getUTCFullYear(), dt.getUTCMonth(), dt.getUTCDate()));
+        const todayOnly = new Date(Date.UTC(todayY, todayM, todayD));
+        if (dateOnly < todayOnly) {
+          await ctx.reply(T[lang].pastDateNotAllowed, this.backKeyboard(lang));
+          return; // keep waiting
+        }
         ctx.session['req_flow'] = {
           step: 'await_return_date',
           approvedDate: dt.toISOString(),
@@ -577,6 +596,22 @@ export class ScenarioFrontendService implements OnModuleInit {
         if (!dt) {
           await ctx.reply(T[lang].invalidDate, this.backKeyboard(lang));
           return; // keep waiting for valid return date
+        }
+        // Validate not past date and not before approved date
+        const approvedDate = flow.approvedDate ? new Date(flow.approvedDate) : null;
+        const today = new Date();
+        const dateOnly = new Date(Date.UTC(dt.getUTCFullYear(), dt.getUTCMonth(), dt.getUTCDate()));
+        const todayOnly = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate()));
+        if (dateOnly < todayOnly) {
+          await ctx.reply(T[lang].pastDateNotAllowed, this.backKeyboard(lang));
+          return; // keep waiting
+        }
+        if (approvedDate) {
+          const approvedOnly = new Date(Date.UTC(approvedDate.getUTCFullYear(), approvedDate.getUTCMonth(), approvedDate.getUTCDate()));
+          if (dateOnly < approvedOnly) {
+            await ctx.reply(T[lang].returnBeforeApproved, this.backKeyboard(lang));
+            return; // keep waiting
+          }
         }
         ctx.session['req_flow'] = {
           step: 'await_reason',
