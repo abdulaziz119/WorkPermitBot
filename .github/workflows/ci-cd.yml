@@ -83,15 +83,27 @@ jobs:
         with:
           ssh-private-key: ${{ secrets.DEPLOY_SSH_KEY }}
 
+      - name: Debug secrets
+        run: |
+          echo "HOST length: ${#DEPLOY_HOST}"
+          echo "USER length: ${#DEPLOY_USER}"
+          echo "HOST starts with: ${DEPLOY_HOST:0:5}"
+          echo "USER starts with: ${DEPLOY_USER:0:5}"
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+
       - name: Known hosts
         run: |
           mkdir -p ~/.ssh
           # Try to get host key, fallback to StrictHostKeyChecking=no
-          ssh-keyscan -T 10 -H ${{ secrets.DEPLOY_HOST }} >> ~/.ssh/known_hosts 2>/dev/null || echo "Using StrictHostKeyChecking=no"
+          ssh-keyscan -T 10 -H "$DEPLOY_HOST" >> ~/.ssh/known_hosts 2>/dev/null || echo "Using StrictHostKeyChecking=no"
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
 
       - name: Deploy via SSH
         run: |
-          ssh -o StrictHostKeyChecking=no ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }} <<'EOF'
+          ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null "$DEPLOY_USER@$DEPLOY_HOST" <<'EOF'
           set -e
           echo "Pulling latest image..."
           docker pull ghcr.io/${{ github.repository_owner }}/workpermit-bot:latest
@@ -117,6 +129,9 @@ jobs:
           YML
           docker compose up -d
           EOF
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
 
       - name: Post deploy check
         run: echo "Deployment triggered."
