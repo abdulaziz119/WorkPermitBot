@@ -91,16 +91,18 @@ jobs:
         run: echo "Digest=${{ steps.meta.outputs.digest }}"
 
       - name: Summary
+        env:
+          TAGS: ${{ steps.meta.outputs.tags }}
+          DIGEST: ${{ steps.meta.outputs.digest }}
         run: |
-          echo "## Image pushed" >> "$GITHUB_STEP_SUMMARY"
-          echo >> "$GITHUB_STEP_SUMMARY"
-          echo "### Tags" >> "$GITHUB_STEP_SUMMARY"
-          # Iterate tags safely (handle newlines / spaces)
-          while IFS= read -r tag; do
-            [ -n "$tag" ] && echo "- $tag" >> "$GITHUB_STEP_SUMMARY"
-          done <<'TAGS'
-${{ steps.meta.outputs.tags }}
-TAGS
-          echo >> "$GITHUB_STEP_SUMMARY"
-          echo "### Digest" >> "$GITHUB_STEP_SUMMARY"
-          echo "${{ steps.meta.outputs.digest }}" >> "$GITHUB_STEP_SUMMARY"
+          {
+            echo "## Image pushed"
+            echo
+            echo "### Tags"
+            for t in $TAGS; do
+              echo "- $t"
+            done
+            echo
+            echo "### Digest"
+            echo "$DIGEST"
+          } >> "$GITHUB_STEP_SUMMARY"
