@@ -24,7 +24,7 @@ export async function ensureBotLaunched(log?: {
   error: (m: string, e?: any) => any;
 }): Promise<void> {
   if (launched) return;
-  if (launchingPromise) return launchingPromise;
+  if (launchingPromise !== null) return launchingPromise;
   const bot = getBot();
   launchingPromise = (async () => {
     try {

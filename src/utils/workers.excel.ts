@@ -16,7 +16,9 @@ export class WorkersExcelService {
     const lines: string[] = [];
 
     // Header in Uzbek
-    lines.push('Ishchi nomi,Telegram ID,Sana,Kelish vaqti,Ketish vaqti,Holati');
+    lines.push(
+      `Ishchi nomi,Telegram ID,Sana,Kelish vaqti,Ketish vaqti,Holati,Period:${period}`,
+    );
 
     for (const item of data) {
       const worker = item.worker;
@@ -56,10 +58,12 @@ export class WorkersExcelService {
             status = "Javob so'ragan";
           }
 
-          const date =
-            att.date || new Date(att.created_at).toLocaleDateString();
+          const dateStr =
+            typeof att.date === 'string'
+              ? att.date
+              : new Date(att.created_at).toLocaleDateString();
           lines.push(
-            `"${worker.fullname}",${worker.telegram_id},"${date}","${checkIn}","${checkOut}","${status}"`,
+            `"${worker.fullname}",${worker.telegram_id},"${dateStr}","${checkIn}","${checkOut}","${status}"`,
           );
         }
       }

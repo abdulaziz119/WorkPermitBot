@@ -6,7 +6,7 @@ export const APP_TIMEZONE = process.env.APP_TIMEZONE || 'Asia/Tashkent';
 export function nowInTz(): Date {
   // toLocaleString with timeZone then new Date parses in local runtime tz
   return new Date(
-    new Date().toLocaleString('en-US', { timeZone: APP_TIMEZONE })
+    new Date().toLocaleString('en-US', { timeZone: APP_TIMEZONE }),
   );
 }
 
@@ -21,9 +21,7 @@ export function currentDateString(): string {
 
 // Format time HH:MM for user display in target timezone
 export function formatTimeHM(date: Date): string {
-  const d = new Date(
-    date.toLocaleString('en-US', { timeZone: APP_TIMEZONE })
-  );
+  const d = new Date(date.toLocaleString('en-US', { timeZone: APP_TIMEZONE }));
   const hh = String(d.getHours()).padStart(2, '0');
   const mm = String(d.getMinutes()).padStart(2, '0');
   return `${hh}:${mm}`;

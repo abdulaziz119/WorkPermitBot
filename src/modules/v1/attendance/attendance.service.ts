@@ -4,6 +4,14 @@ import { MODELS } from '../../../constants/constants';
 import { AttendanceEntity } from '../../../entity/attendance.entity';
 import { nowInTz, currentDateString } from '../../../utils/time/timezone';
 
+class CodedError extends Error {
+  code: string;
+  constructor(code: string) {
+    super(code);
+    this.code = code;
+  }
+}
+
 function startOfDay(date = new Date()): Date {
   const d = new Date(date);
   d.setHours(0, 0, 0, 0);
@@ -54,11 +62,7 @@ export class AttendanceService {
     } else if (!today.check_in) {
       today.check_in = now;
     } else {
-      // Already checked in today
-      const err = new Error('CHECKIN_ALREADY_DONE');
-      // @ts-ignore custom code for callers
-      (err as any).code = 'CHECKIN_ALREADY_DONE';
-      throw err;
+      throw new CodedError('CHECKIN_ALREADY_DONE');
     }
     return this.repo.save(today);
   }
@@ -67,16 +71,10 @@ export class AttendanceService {
     const now = nowInTz();
     const today: AttendanceEntity | null = await this.getToday(workerId, now);
     if (!today || !today.check_in) {
-      const err = new Error('CHECKIN_REQUIRED');
-      // @ts-ignore
-      (err as any).code = 'CHECKIN_REQUIRED';
-      throw err;
+      throw new CodedError('CHECKIN_REQUIRED');
     }
     if (today.check_out) {
-      const err = new Error('CHECKOUT_ALREADY_DONE');
-      // @ts-ignore
-      (err as any).code = 'CHECKOUT_ALREADY_DONE';
-      throw err;
+      throw new CodedError('CHECKOUT_ALREADY_DONE');
     }
     today.check_out = now;
     return this.repo.save(today);

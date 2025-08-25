@@ -1,5 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { Cron, CronExpression } from '@nestjs/schedule';
+import { Cron } from '@nestjs/schedule';
 import { Telegraf } from 'telegraf';
 import { getBot } from './bot.instance';
 import { RequestsService } from '../requests/requests.service';
@@ -21,6 +21,17 @@ export class ScenarioNotificationService {
     this.bot = getBot();
   }
 
+  private formatError(error: unknown): string {
+    if (error instanceof Error) return error.message;
+    if (typeof error === 'string') return error;
+    try {
+      const json = JSON.stringify(error);
+      return typeof json === 'string' ? json : '[Unserializable error]';
+    } catch {
+      return '[Unserializable error object]';
+    }
+  }
+
   // Har kuni soat 10:00 da ishga tushadi
   @Cron('0 10 * * *', {
     name: 'checkOldResponses',
@@ -32,8 +43,9 @@ export class ScenarioNotificationService {
     try {
       // Default: 3 kun oldin javob olgan request larni topish
       await this.checkAndNotifyOldResponses(3);
-    } catch (error) {
-      this.logger.error('Error checking old responses:', error);
+    } catch (error: unknown) {
+      const msg = this.formatError(error);
+      this.logger.error(`Error checking old responses: ${msg}`);
     }
   }
 
@@ -75,8 +87,13 @@ export class ScenarioNotificationService {
   }
 
   private async notifySuperAdminAboutOldResponses(
-    manager: any,
-    oldResponses: any[],
+    manager: { telegram_id: number; language?: string; id?: number },
+    oldResponses: Array<{
+      worker?: { fullname?: string };
+      worker_id: number;
+      updated_at: string | Date;
+      status: RequestsStatusEnum;
+    }>,
     daysThreshold?: number,
   ): Promise<void> {
     try {
@@ -166,11 +183,9 @@ export class ScenarioNotificationService {
       }
 
       await this.bot.telegram.sendMessage(manager.telegram_id, messageText);
-    } catch (error) {
-      this.logger.warn(
-        `Could not notify super admin ${manager.id}:`,
-        error.message,
-      );
+    } catch (error: unknown) {
+      const msg = this.formatError(error);
+      this.logger.warn(`Could not notify super admin ${manager.id}: ${msg}`);
     }
   }
 
@@ -208,9 +223,10 @@ export class ScenarioNotificationService {
       }
 
       return `${superAdminManagers.length} ta super admin ga ${daysThreshold} kundan ortiq eski ${oldResponses.length} ta javob haqida xabar yuborildi`;
-    } catch (error) {
-      this.logger.error('Manual check error:', error);
-      return `Xatolik: ${error.message}`;
+    } catch (error: unknown) {
+      const msg = this.formatError(error);
+      this.logger.error('Manual check error:', msg);
+      return `Xatolik: ${msg}`;
     }
   }
 }

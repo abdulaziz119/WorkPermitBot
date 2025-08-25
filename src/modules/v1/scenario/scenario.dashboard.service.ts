@@ -1,3 +1,7 @@
+/* eslint-disable @typescript-eslint/no-unsafe-member-access */
+/* eslint-disable @typescript-eslint/no-unsafe-assignment */
+/* eslint-disable @typescript-eslint/no-unsafe-argument */
+/* eslint-disable no-empty */
 import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { Markup, Context, Telegraf } from 'telegraf';
 import { ensureBotLaunched, getBot } from './bot.instance';
@@ -169,11 +173,8 @@ export class ScenarioDashboardService implements OnModuleInit {
       const menu = isSuperAdmin
         ? this.superAdminMenu(lang)
         : this.managerMenu(lang);
-      await ctx.reply(
-        lang === 'ru' ? 'Главное меню' : 'Asosiy menyu',
-        menu,
-      );
-    } catch (e) {
+      await ctx.reply(lang === 'ru' ? 'Главное меню' : 'Asosiy menyu', menu);
+    } catch {
       // ignore navigation errors
     }
   }
@@ -214,7 +215,7 @@ export class ScenarioDashboardService implements OnModuleInit {
       const lang = await this.getLang(ctx);
       const isSuperAdmin = await this.managers.isSuperAdmin(tg.id);
       if (!isSuperAdmin) return ctx.reply(T[lang].notSuperAdmin);
-      
+
       const result = await this.notificationService.manualCheckOldResponses(3);
       await ctx.reply(`🔍 3 kunlik check natijasi:\n${result}`);
     });
@@ -225,7 +226,7 @@ export class ScenarioDashboardService implements OnModuleInit {
       const lang = await this.getLang(ctx);
       const isSuperAdmin = await this.managers.isSuperAdmin(tg.id);
       if (!isSuperAdmin) return ctx.reply(T[lang].notSuperAdmin);
-      
+
       const result = await this.notificationService.manualCheckOldResponses(5);
       await ctx.reply(`🔍 5 kunlik check natijasi:\n${result}`);
     });
@@ -236,7 +237,7 @@ export class ScenarioDashboardService implements OnModuleInit {
       const lang = await this.getLang(ctx);
       const isSuperAdmin = await this.managers.isSuperAdmin(tg.id);
       if (!isSuperAdmin) return ctx.reply(T[lang].notSuperAdmin);
-      
+
       const result = await this.notificationService.manualCheckOldResponses(7);
       await ctx.reply(`🔍 1 haftalik check natijasi:\n${result}`);
     });
@@ -274,45 +275,47 @@ export class ScenarioDashboardService implements OnModuleInit {
           this.backToMenuKeyboard(lang),
         );
 
-      const message = `${T[lang].managerPendingBtn}:\n\n`;
       for (const r of pending.slice(0, 10)) {
         const workerName = r.worker?.fullname || `Worker ID: ${r.worker_id}`;
-        
+
         // Format dates and calculate days
         let dateInfo = '';
         let daysCount = '';
-        
+
         if (r.approved_date) {
           const startDate = new Date(r.approved_date);
           const startDD = String(startDate.getUTCDate()).padStart(2, '0');
           const startMM = String(startDate.getUTCMonth() + 1).padStart(2, '0');
           const startYYYY = startDate.getUTCFullYear();
-          
+
           if (r.return_date) {
             const endDate = new Date(r.return_date);
             const endDD = String(endDate.getUTCDate()).padStart(2, '0');
             const endMM = String(endDate.getUTCMonth() + 1).padStart(2, '0');
             const endYYYY = endDate.getUTCFullYear();
-            
+
             // Calculate days between dates
             const timeDiff = endDate.getTime() - startDate.getTime();
             const daysDiff = Math.ceil(timeDiff / (1000 * 3600 * 24));
-            
+
             dateInfo = `📅 ${startDD}.${startMM}.${startYYYY} - ${endDD}.${endMM}.${endYYYY}`;
-            daysCount = lang === 'ru' ? `⏱ ${daysDiff} дней` : `⏱ ${daysDiff} kun`;
+            daysCount =
+              lang === 'ru' ? `⏱ ${daysDiff} дней` : `⏱ ${daysDiff} kun`;
           } else {
             dateInfo = `📅 ${startDD}.${startMM}.${startYYYY}`;
           }
         }
-        
+
         const messageText = [
           `#${r.id}`,
           `👤 ${workerName}`,
           dateInfo,
           daysCount,
-          `📝 ${r.reason}`
-        ].filter(Boolean).join('\n');
-        
+          `📝 ${r.reason}`,
+        ]
+          .filter(Boolean)
+          .join('\n');
+
         await ctx.reply(
           messageText,
           Markup.inlineKeyboard([
@@ -383,21 +386,33 @@ export class ScenarioDashboardService implements OnModuleInit {
 
       try {
         await ctx.editMessageReplyMarkup(undefined);
-      } catch {}
+      } catch {
+        /* ignore */
+      }
 
       if (action === 'approve') {
         await this.requests.approve(requestId, manager.id, comment);
-  await ctx.reply(T[lang].approvedMsg(requestId));
-  // Show manager menu navigation
-  await this.showManagerMenuShortcut(ctx, lang, tg.id);
+        await ctx.reply(T[lang].approvedMsg(requestId));
+        // Show manager menu navigation
+        await this.showManagerMenuShortcut(ctx, lang, tg.id);
         // Worker ga xabar yuborish
-        await this.notifyWorkerDecision(requestId, 'approved', manager.fullname, comment, lang);
+        await this.notifyWorkerDecision(
+          requestId,
+          'approved',
+          manager.fullname,
+          comment,
+        );
       } else {
         await this.requests.reject(requestId, manager.id, comment);
-  await ctx.reply(T[lang].rejectedMsg(requestId));
-  await this.showManagerMenuShortcut(ctx, lang, tg.id);
+        await ctx.reply(T[lang].rejectedMsg(requestId));
+        await this.showManagerMenuShortcut(ctx, lang, tg.id);
         // Worker ga xabar yuborish
-        await this.notifyWorkerDecision(requestId, 'rejected', manager.fullname, comment, lang);
+        await this.notifyWorkerDecision(
+          requestId,
+          'rejected',
+          manager.fullname,
+          comment,
+        );
       }
 
       ctx.session['approval_target'] = undefined;
@@ -418,7 +433,9 @@ export class ScenarioDashboardService implements OnModuleInit {
 
       try {
         await ctx.editMessageReplyMarkup(undefined);
-      } catch {}
+      } catch {
+        /* ignore */
+      }
 
       await ctx.reply(T[lang].approvalCommentPrompt);
     });
@@ -442,7 +459,6 @@ export class ScenarioDashboardService implements OnModuleInit {
             'approved',
             manager.fullname,
             comment,
-            lang,
           );
           await this.showManagerMenuShortcut(ctx, lang, tg.id);
         } else {
@@ -453,7 +469,6 @@ export class ScenarioDashboardService implements OnModuleInit {
             'rejected',
             manager.fullname,
             comment,
-            lang,
           );
           await this.showManagerMenuShortcut(ctx, lang, tg.id);
         }
@@ -472,7 +487,9 @@ export class ScenarioDashboardService implements OnModuleInit {
         return ctx.answerCbQuery(T[lang].noPermission);
       try {
         await ctx.editMessageReplyMarkup(undefined);
-      } catch {}
+      } catch {
+        /* ignore */
+      }
       const list = await this.workers.listUnverified(10);
       if (!list.length)
         return ctx.editMessageText(
@@ -480,7 +497,6 @@ export class ScenarioDashboardService implements OnModuleInit {
           this.backToMenuKeyboard(lang),
         );
 
-      const message = `${T[lang].managerUnverifiedBtn}:\n\n`;
       for (const w of list) {
         await ctx.reply(
           `Ishchi: ${w.fullname} (tg:${w.telegram_id})`,
@@ -571,7 +587,9 @@ export class ScenarioDashboardService implements OnModuleInit {
       if (!verified) return ctx.answerCbQuery(T[lang].notFound);
       try {
         await ctx.editMessageReplyMarkup(undefined);
-      } catch {}
+      } catch {
+        /* ignore */
+      }
       await ctx.reply(T[lang].workerVerifiedMsg(verified.fullname));
       // Notify worker about approval
       try {
@@ -628,7 +646,9 @@ export class ScenarioDashboardService implements OnModuleInit {
 
       try {
         await ctx.editMessageReplyMarkup(undefined);
-      } catch {}
+      } catch {
+        /* ignore */
+      }
       await ctx.reply(
         lang === 'ru'
           ? `Заявка работника #${id} отклонена ❌`
@@ -903,7 +923,9 @@ export class ScenarioDashboardService implements OnModuleInit {
 
       try {
         await ctx.editMessageReplyMarkup(undefined);
-      } catch {}
+      } catch {
+        /* ignore */
+      }
       const list = await this.managers.listUnverified();
       if (!list.length)
         return ctx.editMessageText(
@@ -976,7 +998,9 @@ export class ScenarioDashboardService implements OnModuleInit {
       );
       try {
         await ctx.editMessageReplyMarkup(undefined);
-      } catch {}
+      } catch {
+        /* ignore */
+      }
       await ctx.reply(
         lang === 'ru'
           ? `${verified.fullname} супер админ роли bilan tasdiqlandi 👑`
@@ -1016,7 +1040,9 @@ export class ScenarioDashboardService implements OnModuleInit {
       );
       try {
         await ctx.editMessageReplyMarkup(undefined);
-      } catch {}
+      } catch {
+        /* ignore */
+      }
       await ctx.reply(
         lang === 'ru'
           ? `${verified.fullname} админ роли bilan tasdiqlandi 👨‍💼`
@@ -1081,7 +1107,7 @@ export class ScenarioDashboardService implements OnModuleInit {
     decision: 'approved' | 'rejected',
     managerName: string,
     comment?: string,
-    managerLang?: Lang,
+    // removed unused managerLang param
   ): Promise<void> {
     try {
       const request = await this.requests.findByIdWithWorker(requestId);
@@ -1092,19 +1118,22 @@ export class ScenarioDashboardService implements OnModuleInit {
 
       let messageText = '';
       if (decision === 'approved') {
-        messageText = workerLang === 'ru' 
-          ? `✅ Ваш запрос #${requestId} одобрен!\n👨‍💼 Менеджер: ${managerName}`
-          : `✅ #${requestId} soʼrovingiz tasdiqlandi!\n👨‍💼 Manager: ${managerName}`;
+        messageText =
+          workerLang === 'ru'
+            ? `✅ Ваш запрос #${requestId} одобрен!\n👨‍💼 Менеджер: ${managerName}`
+            : `✅ #${requestId} soʼrovingiz tasdiqlandi!\n👨‍💼 Manager: ${managerName}`;
       } else {
-        messageText = workerLang === 'ru'
-          ? `❌ Ваш запрос #${requestId} отклонён\n👨‍💼 Менеджер: ${managerName}`
-          : `❌ #${requestId} soʼrovingiz rad etildi\n👨‍💼 Manager: ${managerName}`;
+        messageText =
+          workerLang === 'ru'
+            ? `❌ Ваш запрос #${requestId} отклонён\n👨‍💼 Менеджер: ${managerName}`
+            : `❌ #${requestId} soʼrovingiz rad etildi\n👨‍💼 Manager: ${managerName}`;
       }
 
       if (comment && comment.trim()) {
-        messageText += workerLang === 'ru'
-          ? `\n📝 Комментарий: ${comment}`
-          : `\n📝 Izoh: ${comment}`;
+        messageText +=
+          workerLang === 'ru'
+            ? `\n📝 Комментарий: ${comment}`
+            : `\n📝 Izoh: ${comment}`;
       }
 
       await this.bot.telegram
