@@ -1,13 +1,8 @@
-version: "3.9"
-
-# NOTE:
-# - container_name entries removed to avoid name conflicts when manually running containers.
-# - Use service name 'postgres' as DB_HOST inside the app.
-# - Ensure .env file (same directory) provides DB_NAME / DB_USER / DB_PASSWORD etc.
-
 services:
+  # PostgreSQL Database
   postgres:
     image: postgres:15-alpine
+    container_name: workpermit_postgres
     restart: unless-stopped
     environment:
       POSTGRES_DB: ${DB_NAME:-workpermit_db}
@@ -27,56 +22,45 @@ services:
       timeout: 5s
       retries: 5
 
+  # NestJS Application
   app:
-    # Agar CI image push qilsa shu variant (tavsiya):
-    image: ghcr.io/abdulaziz119/workpermit-bot:latest
-  # Har ishga tushganda yangi qatlamni tekshirish uchun (compose plugin qo'llab-quvvatlasa):
-  # pull_policy: always   # Agar Compose versiyangiz qo'llamasa shu qatorni komment qoldiring
-    # Agar lokal build kerak bo'lsa yuqoridagini o'chirib, quyidagilarni uncomment qiling:
-    # build:
-    #   context: .
-    #   dockerfile: Dockerfile
-    #   target: production
-  depends_on:
-      postgres:
-        condition: service_healthy
-  # redis shart emas; faqat profil yoqsangiz ishga tushadi (qarang redis service)
-  # redis:
-  #   condition: service_started
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: production
+    container_name: workpermit_app
     restart: unless-stopped
-    env_file: .env
     environment:
-      DB_HOST: postgres               # Service name resolves via compose DNS
+      NODE_ENV: production
+      DB_HOST: postgres
+      DB_PORT: 5432
       DB_NAME: ${DB_NAME:-workpermit_db}
       DB_USER: ${DB_USER:-postgres}
       DB_PASSWORD: ${DB_PASSWORD:-postgres123}
+      BOT_TOKEN: ${BOT_TOKEN}
       DB_SCHEMA: ${DB_SCHEMA:-public}
-      NODE_ENV: ${NODE_ENV:-production}
-      APP_PORT: ${APP_PORT:-3000}
-      TZ: ${TZ:-Asia/Tashkent}
-      # BOT_TOKEN .env dan olinadi
     ports:
       - "${APP_PORT:-3000}:3000"
+    depends_on:
+      postgres:
+        condition: service_healthy
     networks:
       - workpermit_network
     volumes:
       - ./logs:/app/logs
     healthcheck:
-      test: ["CMD-SHELL", "wget -q -O /dev/null http://localhost:3000/api/health || exit 1"]
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000/api/health", "||", "exit", "1"]
       interval: 30s
       timeout: 10s
       retries: 3
       start_period: 40s
 
-  # Agar avtomatik yangilash uchun watchtower ishlatmoqchi bo'lsangiz (hozir ishlatilmaydi):
-  # labels:
-  #   - "com.centurylinklabs.watchtower.enable=true"
-
+  # Redis for session storage (optional)
   redis:
     image: redis:7-alpine
+    container_name: workpermit_redis
     restart: unless-stopped
     command: redis-server --appendonly yes
-    profiles: ["redis"]          # Run only if: docker compose --profile redis up -d
     ports:
       - "${REDIS_PORT:-6379}:6379"
     volumes:
@@ -91,7 +75,9 @@ services:
 
 volumes:
   postgres_data:
+    driver: local
   redis_data:
+    driver: local
 
 networks:
   workpermit_network:
