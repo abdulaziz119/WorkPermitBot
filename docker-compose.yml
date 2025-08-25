@@ -1,3 +1,5 @@
+version: "3.9"
+
 services:
   postgres:
     image: postgres:15-alpine
@@ -22,8 +24,19 @@ services:
       retries: 5
 
   app:
+    # Agar CI image push qilsa shu variant (tavsiya):
     image: ghcr.io/abdulaziz119/workpermit-bot:latest
+    # Agar lokal build kerak bo'lsa yuqoridagini o'chirib, quyidagilarni uncomment qiling:
+    # build:
+    #   context: .
+    #   dockerfile: Dockerfile
+    #   target: production
     container_name: workpermit_app
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
     restart: unless-stopped
     env_file: .env
     environment:
@@ -32,12 +45,10 @@ services:
       DB_USER: ${DB_USER:-postgres}
       DB_PASSWORD: ${DB_PASSWORD:-postgres123}
       DB_SCHEMA: ${DB_SCHEMA:-public}
-      NODE_ENV: production
-      APP_PORT: 3000
+      NODE_ENV: ${NODE_ENV:-production}
+      APP_PORT: ${APP_PORT:-3000}
       TZ: ${TZ:-Asia/Tashkent}
-      # BOT_TOKEN: (env_file orqali)
-    depends_on:
-      - postgres
+      # BOT_TOKEN .env dan olinadi
     ports:
       - "${APP_PORT:-3000}:3000"
     networks:
