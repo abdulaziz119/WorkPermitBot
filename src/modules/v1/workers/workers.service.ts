@@ -82,7 +82,7 @@ export class WorkersService {
     hasNext: boolean;
     hasPrev: boolean;
   }> {
-    const offset = (page - 1) * limit;
+    const offset: number = (page - 1) * limit;
     const [workers, total] = await this.repo.findAndCount({
       where: { is_verified: true },
       order: { created_at: 'ASC' },
