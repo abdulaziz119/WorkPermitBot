@@ -137,7 +137,7 @@ export class ManagersService {
 
   async verifyManagerWithRole(
     managerId: number,
-    role: 'SUPER_ADMIN' | 'ADMIN',
+    role: UserRoleEnum,
   ): Promise<ManagerEntity | null> {
     const manager = await this.managerRepo.findOne({
       where: { id: managerId },
@@ -147,7 +147,9 @@ export class ManagersService {
     // Role va active holatini yangilash
     manager.is_active = true;
     manager.role =
-      role === 'SUPER_ADMIN' ? UserRoleEnum.SUPER_ADMIN : UserRoleEnum.ADMIN;
+      role === UserRoleEnum.SUPER_ADMIN
+        ? UserRoleEnum.SUPER_ADMIN
+        : UserRoleEnum.ADMIN;
     await this.managerRepo.save(manager);
 
     return manager;

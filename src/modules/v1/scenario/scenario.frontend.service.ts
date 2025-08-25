@@ -5,7 +5,7 @@ import { WorkersService } from '../workers/workers.service';
 import { ManagersService } from '../managers/managers.service';
 import { RequestsService } from '../requests/requests.service';
 import { AttendanceService } from '../attendance/attendance.service';
-import { UserRoleEnum } from '../../../utils/enum/user.enum';
+import { UserRoleEnum, language } from '../../../utils/enum/user.enum';
 import {
   APP_TIMEZONE,
   REMINDER_CHECKIN_HH,
@@ -17,10 +17,12 @@ import { WorkerEntity } from '../../../entity/workers.entity';
 import { ManagerEntity } from '../../../entity/managers.entity';
 import { RequestEntity } from '../../../entity/requests.entity';
 import { AttendanceEntity } from '../../../entity/attendance.entity';
+import { RequestsStatusEnum } from '../../../utils/enum/requests.enum';
 
 type Ctx = Context & { session?: Record<string, any> };
 
-type Lang = 'uz' | 'ru';
+// Supported interface languages (restrict to Uzbek & Russian for bot UI)
+type Lang = language.UZ | language.RU; // resolves to 'uz' | 'ru'
 const T = {
   uz: {
     chooseLang: 'Tilni tanlang:',
@@ -219,11 +221,13 @@ export class ScenarioFrontendService implements OnModuleInit {
     const tgId: number = Number(ctx.from?.id);
     if (tgId) {
       const w: WorkerEntity = await this.workers.findByTelegramId(tgId);
-      if (w?.language) return w.language as Lang;
+      if (w?.language)
+        return w.language === language.RU ? language.RU : language.UZ;
       const m: ManagerEntity = await this.managers.findByTelegramId(tgId);
-      if (m?.language) return m.language as Lang;
+      if (m?.language)
+        return m.language === language.RU ? language.RU : language.UZ;
     }
-    return 'uz';
+    return language.UZ;
   }
 
   private mainMenu(isVerified: boolean, lang: Lang) {
@@ -261,16 +265,22 @@ export class ScenarioFrontendService implements OnModuleInit {
     return ctx.reply(text, keyboard);
   }
 
-  private statusLabel(lang: Lang, status: string): string {
-    if (lang === 'ru') {
-      if (status === 'pending') return `⏳ ${T.ru.statusPending}`;
-      if (status === 'approved') return `✅ ${T.ru.statusApproved}`;
-      if (status === 'rejected') return `❌ ${T.ru.statusRejected}`;
+  private statusLabel(lang: Lang, status: RequestsStatusEnum): string {
+    if (lang === language.RU) {
+      if (status === RequestsStatusEnum.PENDING)
+        return `⏳ ${T.ru.statusPending}`;
+      if (status === RequestsStatusEnum.APPROVED)
+        return `✅ ${T.ru.statusApproved}`;
+      if (status === RequestsStatusEnum.REJECTED)
+        return `❌ ${T.ru.statusRejected}`;
       return status;
     }
-    if (status === 'pending') return `⏳ ${T.uz.statusPending}`;
-    if (status === 'approved') return `✅ ${T.uz.statusApproved}`;
-    if (status === 'rejected') return `❌ ${T.uz.statusRejected}`;
+    if (status === RequestsStatusEnum.PENDING)
+      return `⏳ ${T.uz.statusPending}`;
+    if (status === RequestsStatusEnum.APPROVED)
+      return `✅ ${T.uz.statusApproved}`;
+    if (status === RequestsStatusEnum.REJECTED)
+      return `❌ ${T.uz.statusRejected}`;
     return status;
   }
 
@@ -324,7 +334,7 @@ export class ScenarioFrontendService implements OnModuleInit {
     if (isSuperAdmin) {
       menuButtons.push([
         Markup.button.callback(
-          lang === 'ru'
+          lang === language.RU
             ? 'Неподтверждённые менеджеры 👨‍💼'
             : 'Tasdiqlanmagan managerlar 👨‍💼',
           'mgr_managers_pending',
@@ -338,10 +348,10 @@ export class ScenarioFrontendService implements OnModuleInit {
     ]);
 
     const title = isSuperAdmin
-      ? lang === 'ru'
+      ? lang === language.RU
         ? 'Меню супер админа:'
         : 'Super Admin menyusi:'
-      : lang === 'ru'
+      : lang === language.RU
         ? 'Меню менеджера:'
         : 'Manager menyusi:';
     await ctx.reply(title, Markup.inlineKeyboard(menuButtons));
@@ -400,7 +410,7 @@ export class ScenarioFrontendService implements OnModuleInit {
     // Language selection
     bot.action(['lang_uz', 'lang_ru'], async (ctx) => {
       ctx.session ??= {};
-      const lang: Lang = ctx.match[0] === 'lang_ru' ? 'ru' : 'uz';
+      const lang: Lang = ctx.match[0] === 'lang_ru' ? language.RU : language.UZ;
       ctx.session.lang = lang;
       const tr = T[lang];
 
@@ -425,7 +435,8 @@ export class ScenarioFrontendService implements OnModuleInit {
     // Role selection (ask user to enter fullname next)
     bot.action(['role_worker', 'role_manager'], async (ctx) => {
       ctx.session ??= {};
-      const lang: Lang = ctx.session.lang || 'uz';
+      const lang: Lang =
+        ctx.session.lang === language.RU ? language.RU : language.UZ;
       const tr = T[lang];
       const tgId: number = Number(ctx.from?.id);
       const isWorker: boolean = ctx.match[0] === 'role_worker';
@@ -750,13 +761,13 @@ export class ScenarioFrontendService implements OnModuleInit {
 
       const lines: string = pageRequests
         .map((r: RequestEntity): string => {
-          const statusText: string = this.statusLabel(lang, String(r.status));
+          const statusText: string = this.statusLabel(lang, r.status);
           const dateText: string = r.approved_date
             ? ((): string => {
                 const d = new Date(r.approved_date);
                 const dd: string = String(d.getUTCDate()).padStart(2, '0');
                 const mm: string = String(d.getUTCMonth() + 1).padStart(2, '0');
-                const yyyy:number = d.getUTCFullYear();
+                const yyyy: number = d.getUTCFullYear();
                 return `📅 ${dd}.${mm}.${yyyy}`;
               })()
             : '';
@@ -839,7 +850,8 @@ export class ScenarioFrontendService implements OnModuleInit {
       const managers: ManagerEntity[] = await this.managers.listActive();
       await Promise.all(
         managers.map((m: ManagerEntity) => {
-          const msg: string = m.language === 'ru' ? messageRu : messageUz;
+          const msg: string =
+            m.language === language.RU ? messageRu : messageUz;
           return this.bot.telegram
             .sendMessage(m.telegram_id, msg)
             .catch((e) =>
@@ -874,7 +886,7 @@ export class ScenarioFrontendService implements OnModuleInit {
       await Promise.all(
         adminManagers.map(async (m) => {
           const text: string =
-            m.language === 'ru'
+            m.language === language.RU
               ? `Новый работник: ${worker.fullname} (tg:${worker.telegram_id}). Требуется подтверждение.`
               : `Yangi ishchi: ${worker.fullname} (tg:${worker.telegram_id}). Tasdiqlash kerak.`;
           const kb = Markup.inlineKeyboard([
@@ -884,7 +896,7 @@ export class ScenarioFrontendService implements OnModuleInit {
                 `approve_worker_${worker.id}`,
               ),
               Markup.button.callback(
-                m.language === 'ru' ? 'Отклонить ❌' : 'Rad etish ❌',
+                m.language === language.RU ? 'Отклонить ❌' : 'Rad etish ❌',
                 `reject_worker_${worker.id}`,
               ),
             ],
@@ -906,7 +918,7 @@ export class ScenarioFrontendService implements OnModuleInit {
   private async notifySuperAdminsNewManager(manager: {
     telegram_id: number;
     fullname: string;
-    language: 'uz' | 'ru';
+    language: language;
   }) {
     try {
       const superAdmins: ManagerEntity[] =
@@ -914,25 +926,29 @@ export class ScenarioFrontendService implements OnModuleInit {
       await Promise.all(
         superAdmins.map(async (admin: ManagerEntity) => {
           const text: string =
-            admin.language === 'ru'
+            admin.language === language.RU
               ? `Новый менеджер: ${manager.fullname} (tg:${manager.telegram_id}). Выберите роль:`
               : `Yangi menejer: ${manager.fullname} (tg:${manager.telegram_id}). Rolni tanlang:`;
           const kb = Markup.inlineKeyboard([
             [
               Markup.button.callback(
-                admin.language === 'ru' ? 'Супер Админ �' : 'Super Admin 👑',
+                admin.language === language.RU
+                  ? 'Супер Админ �'
+                  : 'Super Admin 👑',
                 `approve_manager_super_admin_${manager.telegram_id}`,
               ),
             ],
             [
               Markup.button.callback(
-                admin.language === 'ru' ? 'Админ 👨‍💼' : 'Admin 👨‍�',
+                admin.language === language.RU ? 'Админ 👨‍💼' : 'Admin 👨‍�',
                 `approve_manager_admin_${manager.telegram_id}`,
               ),
             ],
             [
               Markup.button.callback(
-                admin.language === 'ru' ? 'Отклонить ❌' : 'Rad etish ❌',
+                admin.language === language.RU
+                  ? 'Отклонить ❌'
+                  : 'Rad etish ❌',
                 `reject_manager_${manager.telegram_id}`,
               ),
             ],
@@ -1006,9 +1022,10 @@ export class ScenarioFrontendService implements OnModuleInit {
           const rec: AttendanceEntity = todayMap.get(w.id);
           // Skip if already checked in
           if (rec?.check_in) return;
-          const lang: Lang = (w.language as any) || 'uz';
+          const lang: Lang =
+            w.language === language.RU ? language.RU : language.UZ;
           const text =
-            lang === 'ru'
+            lang === language.RU
               ? 'Пожалуйста, отметьте прибытие: Пришёл (Check-in) ✅'
               : 'Iltimos, kelganingizni tasdiqlang: Kelish (Check-in) ✅';
           await this.bot.telegram
@@ -1034,9 +1051,10 @@ export class ScenarioFrontendService implements OnModuleInit {
           const rec: AttendanceEntity = todayMap.get(w.id);
           // Send only if has check_in but no check_out yet
           if (!rec?.check_in || rec.check_out) return;
-          const lang: Lang = (w.language as any) || 'uz';
+          const lang: Lang =
+            w.language === language.RU ? language.RU : language.UZ;
           const text =
-            lang === 'ru'
+            lang === language.RU
               ? 'Пожалуйста, отметьте уход: Ушёл (Check-out) 🕘'
               : 'Iltimos, ketganingizni tasdiqlang: Ketish (Check-out) 🕘';
           await this.bot.telegram

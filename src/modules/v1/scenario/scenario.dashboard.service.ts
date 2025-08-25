@@ -7,13 +7,15 @@ import { WorkersService } from '../workers/workers.service';
 import { AttendanceService } from '../attendance/attendance.service';
 import { ScenarioNotificationService } from './scenario.notification.service';
 import { WorkersExcelService } from '../../../utils/workers.excel';
+import { language, UserRoleEnum } from '../../../utils/enum/user.enum';
 import { ManagerEntity } from '../../../entity/managers.entity';
 import { RequestEntity } from '../../../entity/requests.entity';
 import { WorkerEntity } from '../../../entity/workers.entity';
 import { AttendanceEntity } from '../../../entity/attendance.entity';
+import { RequestsStatusEnum } from '../../../utils/enum/requests.enum';
 
 type Ctx = Context & { session?: Record<string, any> };
-type Lang = 'uz' | 'ru';
+type Lang = language.UZ | language.RU;
 
 const T = {
   uz: {
@@ -122,13 +124,14 @@ export class ScenarioDashboardService implements OnModuleInit {
 
   private async getLang(ctx: Ctx): Promise<Lang> {
     const sessLang = ctx.session?.lang as Lang | undefined;
-    if (sessLang) return sessLang;
+    if (sessLang) return sessLang === language.RU ? language.RU : language.UZ;
     const tgId: number = Number(ctx.from?.id);
     if (tgId) {
       const m: ManagerEntity = await this.managers.findByTelegramId(tgId);
-      if (m?.language) return m.language as Lang;
+      if (m?.language)
+        return m.language === language.RU ? language.RU : language.UZ;
     }
-    return 'uz';
+    return language.UZ;
   }
 
   private managerMenu(lang: Lang) {
@@ -174,7 +177,10 @@ export class ScenarioDashboardService implements OnModuleInit {
       const menu = isSuperAdmin
         ? this.superAdminMenu(lang)
         : this.managerMenu(lang);
-      await ctx.reply(lang === 'ru' ? 'Главное меню' : 'Asosiy menyu', menu);
+      await ctx.reply(
+        lang === language.RU ? 'Главное меню' : 'Asosiy menyu',
+        menu,
+      );
     } catch (e) {
       // ignore navigation errors
     }
@@ -318,7 +324,9 @@ export class ScenarioDashboardService implements OnModuleInit {
 
             dateInfo = `📅 ${startDD}.${startMM}.${startYYYY} - ${endDD}.${endMM}.${endYYYY}`;
             daysCount =
-              lang === 'ru' ? `⏱ ${daysDiff} дней` : `⏱ ${daysDiff} kun`;
+              lang === language.RU
+                ? `⏱ ${daysDiff} дней`
+                : `⏱ ${daysDiff} kun`;
           } else {
             dateInfo = `📅 ${startDD}.${startMM}.${startYYYY}`;
           }
@@ -368,7 +376,7 @@ export class ScenarioDashboardService implements OnModuleInit {
       const buttons = Markup.inlineKeyboard([
         [
           Markup.button.callback(
-            lang === 'ru'
+            lang === language.RU
               ? `${action === 'approve' ? 'Подтвердить' : 'Отклонить'} без комментария`
               : `${action === 'approve' ? 'Tasdiqlash' : 'Rad etish'} izohhsiz`,
             `${action}_no_comment_${requestId}`,
@@ -376,7 +384,7 @@ export class ScenarioDashboardService implements OnModuleInit {
         ],
         [
           Markup.button.callback(
-            lang === 'ru'
+            lang === language.RU
               ? `${action === 'approve' ? 'Подтвердить' : 'Отклонить'} с комментарием`
               : `${action === 'approve' ? 'Tasdiqlash' : 'Rad etish'} izoh bilan`,
             `${action}_with_comment_${requestId}`,
@@ -385,7 +393,7 @@ export class ScenarioDashboardService implements OnModuleInit {
       ]);
 
       await ctx.reply(
-        lang === 'ru'
+        lang === language.RU
           ? 'Выберите способ ответа:'
           : 'Javob berish usulini tanlang:',
         buttons,
@@ -418,7 +426,7 @@ export class ScenarioDashboardService implements OnModuleInit {
         // Worker ga xabar yuborish
         await this.notifyWorkerDecision(
           requestId,
-          'approved',
+          RequestsStatusEnum.APPROVED,
           manager.fullname,
           comment,
           lang,
@@ -430,7 +438,7 @@ export class ScenarioDashboardService implements OnModuleInit {
         // Worker ga xabar yuborish
         await this.notifyWorkerDecision(
           requestId,
-          'rejected',
+          RequestsStatusEnum.REJECTED,
           manager.fullname,
           comment,
           lang,
@@ -480,7 +488,7 @@ export class ScenarioDashboardService implements OnModuleInit {
           await ctx.reply(T[lang].approvedMsg(target.requestId));
           await this.notifyWorkerDecision(
             target.requestId,
-            'approved',
+            RequestsStatusEnum.APPROVED,
             manager.fullname,
             comment,
             lang,
@@ -491,7 +499,7 @@ export class ScenarioDashboardService implements OnModuleInit {
           await ctx.reply(T[lang].rejectedMsg(target.requestId));
           await this.notifyWorkerDecision(
             target.requestId,
-            'rejected',
+            RequestsStatusEnum.REJECTED,
             manager.fullname,
             comment,
             lang,
@@ -546,7 +554,7 @@ export class ScenarioDashboardService implements OnModuleInit {
     });
 
     bot.action(/^verify_worker_(\d+)$/, async (ctx) => {
-      const id = Number(ctx.match[1]);
+      const id: number = Number(ctx.match[1]);
       const tg = ctx.from;
       const lang = await this.getLang(ctx);
       const manager: ManagerEntity = await this.managers.findByTelegramId(
@@ -559,36 +567,41 @@ export class ScenarioDashboardService implements OnModuleInit {
       await ctx.reply(T[lang].workerVerifiedMsg(verified.fullname));
       // Notify worker about approval in their own language and show menu
       try {
-        const wLang = (verified.language as Lang) || 'uz';
+        const wLang: Lang =
+          verified.language === language.RU ? language.RU : language.UZ;
         // build minimal worker menu (check-in/out etc.) inline keyboard
         const buttons: any[] = [];
         buttons.push([
           Markup.button.callback(
-            wLang === 'ru' ? 'Пришёл (Check-in) ✅' : 'Kelish (Check-in) ✅',
+            wLang === language.RU
+              ? 'Пришёл (Check-in) ✅'
+              : 'Kelish (Check-in) ✅',
             'check_in',
           ),
         ]);
         buttons.push([
           Markup.button.callback(
-            wLang === 'ru' ? 'Ушёл (Check-out) 🕘' : 'Ketish (Check-out) 🕘',
+            wLang === language.RU
+              ? 'Ушёл (Check-out) 🕘'
+              : 'Ketish (Check-out) 🕘',
             'check_out',
           ),
         ]);
         buttons.push([
           Markup.button.callback(
-            wLang === 'ru' ? 'Запросить отгул 📝' : 'Javob soʼrash 📝',
+            wLang === language.RU ? 'Запросить отгул 📝' : 'Javob soʼrash 📝',
             'request_leave',
           ),
         ]);
         buttons.push([
           Markup.button.callback(
-            wLang === 'ru' ? 'Мои запросы 📄' : 'Mening soʼrovlarim 📄',
+            wLang === language.RU ? 'Мои запросы 📄' : 'Mening soʼrovlarim 📄',
             'my_requests',
           ),
         ]);
         await this.bot.telegram.sendMessage(
           verified.telegram_id,
-          wLang === 'ru'
+          wLang === language.RU
             ? 'Ваш профиль подтверждён менеджером ✅'
             : 'Profilingiz menejer tomonidan tasdiqlandi ✅',
           { reply_markup: { inline_keyboard: buttons } as any },
@@ -602,7 +615,7 @@ export class ScenarioDashboardService implements OnModuleInit {
 
     // Approve/Reject inline from new worker notification
     bot.action(/^approve_worker_(\d+)$/, async (ctx) => {
-      const id = Number(ctx.match[1]);
+      const id: number = Number(ctx.match[1]);
       const tg = ctx.from;
       const lang = await this.getLang(ctx);
       const manager: ManagerEntity = await this.managers.findByTelegramId(
@@ -622,35 +635,40 @@ export class ScenarioDashboardService implements OnModuleInit {
       await ctx.reply(T[lang].workerVerifiedMsg(verified.fullname));
       // Notify worker about approval
       try {
-        const wLang = (verified.language as Lang) || 'uz';
+        const wLang: Lang =
+          verified.language === language.RU ? language.RU : language.UZ;
         const buttons: any[] = [];
         buttons.push([
           Markup.button.callback(
-            wLang === 'ru' ? 'Пришёл (Check-in) ✅' : 'Kelish (Check-in) ✅',
+            wLang === language.RU
+              ? 'Пришёл (Check-in) ✅'
+              : 'Kelish (Check-in) ✅',
             'check_in',
           ),
         ]);
         buttons.push([
           Markup.button.callback(
-            wLang === 'ru' ? 'Ушёл (Check-out) 🕘' : 'Ketish (Check-out) 🕘',
+            wLang === language.RU
+              ? 'Ушёл (Check-out) 🕘'
+              : 'Ketish (Check-out) 🕘',
             'check_out',
           ),
         ]);
         buttons.push([
           Markup.button.callback(
-            wLang === 'ru' ? 'Запросить отгул 📝' : 'Javob soʼrash 📝',
+            wLang === language.RU ? 'Запросить отгул 📝' : 'Javob soʼrash 📝',
             'request_leave',
           ),
         ]);
         buttons.push([
           Markup.button.callback(
-            wLang === 'ru' ? 'Мои запросы 📄' : 'Mening soʼrovlarim 📄',
+            wLang === language.RU ? 'Мои запросы 📄' : 'Mening soʼrovlarim 📄',
             'my_requests',
           ),
         ]);
         await this.bot.telegram.sendMessage(
           verified.telegram_id,
-          wLang === 'ru'
+          wLang === language.RU
             ? 'Ваш профиль подтверждён менеджером ✅'
             : 'Profilingiz menejer tomonidan tasdiqlandi ✅',
           { reply_markup: { inline_keyboard: buttons } as any },
@@ -663,7 +681,7 @@ export class ScenarioDashboardService implements OnModuleInit {
     });
 
     bot.action(/^reject_worker_(\d+)$/, async (ctx) => {
-      const id = Number(ctx.match[1]);
+      const id: number = Number(ctx.match[1]);
       const tg = ctx.from;
       const lang = await this.getLang(ctx);
       const manager: ManagerEntity = await this.managers.findByTelegramId(
@@ -679,7 +697,7 @@ export class ScenarioDashboardService implements OnModuleInit {
         await ctx.editMessageReplyMarkup(undefined);
       } catch {}
       await ctx.reply(
-        lang === 'ru'
+        lang === language.RU
           ? `Заявка работника #${id} отклонена ❌`
           : `Ishchi #${id} arizasi rad etildi ❌`,
       );
@@ -690,7 +708,7 @@ export class ScenarioDashboardService implements OnModuleInit {
           const wLang = (w.language as Lang) || 'uz';
           await this.bot.telegram.sendMessage(
             w.telegram_id,
-            wLang === 'ru'
+            wLang === language.RU
               ? 'Ваш профиль отклонён ❌'
               : 'Profilingiz rad etildi ❌',
           );
@@ -987,7 +1005,7 @@ export class ScenarioDashboardService implements OnModuleInit {
     });
 
     bot.action(/^verify_manager_(\d+)$/, async (ctx) => {
-      const id = Number(ctx.match[1]);
+      const id: number = Number(ctx.match[1]);
       const tg = ctx.from;
       const lang = await this.getLang(ctx);
       const isSuperAdmin: boolean = await this.managers.isSuperAdmin(tg.id);
@@ -1000,10 +1018,11 @@ export class ScenarioDashboardService implements OnModuleInit {
 
       // Notify manager about approval
       try {
-        const mLang = (verified.language as Lang) || 'uz';
+        const mLang: Lang =
+          verified.language === language.RU ? language.RU : language.UZ;
         await this.bot.telegram.sendMessage(
           verified.telegram_id,
-          mLang === 'ru'
+          mLang === language.RU
             ? 'Ваш профиль менеджера подтверждён ✅ Используйте /manager для меню.'
             : "Manager profilingiz tasdiqlandi ✅ /manager buyrug'i bilan menyudan foydalaning.",
         );
@@ -1030,23 +1049,24 @@ export class ScenarioDashboardService implements OnModuleInit {
       // Super Admin roli bilan tasdiqlash
       const verified: ManagerEntity = await this.managers.verifyManagerWithRole(
         manager.id,
-        'SUPER_ADMIN',
+        UserRoleEnum.SUPER_ADMIN,
       );
       try {
         await ctx.editMessageReplyMarkup(undefined);
       } catch {}
       await ctx.reply(
-        lang === 'ru'
+        lang === language.RU
           ? `${verified.fullname} супер админ роли bilan tasdiqlandi 👑`
           : `${verified.fullname} super admin roli bilan tasdiqlandi 👑`,
       );
 
       // Notify manager
       try {
-        const mLang = (verified.language as Lang) || 'uz';
+        const mLang: Lang =
+          verified.language === language.RU ? language.RU : language.UZ;
         await this.bot.telegram.sendMessage(
           verified.telegram_id,
-          mLang === 'ru'
+          mLang === language.RU
             ? 'Ваш профиль менеджера подтверждён как Супер Админ 👑 Используйте /manager для меню.'
             : "Manager profilingiz Super Admin roli bilan tasdiqlandi 👑 /manager buyrug'i bilan menyudan foydalaning.",
         );
@@ -1071,23 +1091,24 @@ export class ScenarioDashboardService implements OnModuleInit {
       // Admin roli bilan tasdiqlash
       const verified: ManagerEntity = await this.managers.verifyManagerWithRole(
         manager.id,
-        'ADMIN',
+        UserRoleEnum.ADMIN,
       );
       try {
         await ctx.editMessageReplyMarkup(undefined);
       } catch {}
       await ctx.reply(
-        lang === 'ru'
+        lang === language.RU
           ? `${verified.fullname} админ роли bilan tasdiqlandi 👨‍💼`
           : `${verified.fullname} admin roli bilan tasdiqlandi 👨‍💼`,
       );
 
       // Notify manager
       try {
-        const mLang = (verified.language as Lang) || 'uz';
+        const mLang: Lang =
+          verified.language === language.RU ? language.RU : language.UZ;
         await this.bot.telegram.sendMessage(
           verified.telegram_id,
-          mLang === 'ru'
+          mLang === language.RU
             ? 'Ваш профиль менеджера подтверждён как Админ 👨‍💼 Используйте /manager для меню.'
             : "Manager profilingiz Admin roli bilan tasdiqlandi 👨‍💼 /manager buyrug'i bilan menyudan foydalaning.",
         );
@@ -1109,7 +1130,7 @@ export class ScenarioDashboardService implements OnModuleInit {
         await ctx.editMessageReplyMarkup(undefined);
       } catch {}
       await ctx.reply(
-        lang === 'ru'
+        lang === language.RU
           ? `Заявка менеджера #${telegramId} отклонена ❌`
           : `Manager #${telegramId} arizasi rad etildi ❌`,
       );
@@ -1119,10 +1140,11 @@ export class ScenarioDashboardService implements OnModuleInit {
         const manager: ManagerEntity =
           await this.managers.findByTelegramId(telegramId);
         if (manager) {
-          const mLang = (manager.language as Lang) || 'uz';
+          const mLang: Lang =
+            manager.language === language.RU ? language.RU : language.UZ;
           await this.bot.telegram.sendMessage(
             manager.telegram_id,
-            mLang === 'ru'
+            mLang === language.RU
               ? 'Ваш профиль менеджера отклонён ❌'
               : 'Manager profilingiz rad etildi ❌',
           );
@@ -1138,7 +1160,7 @@ export class ScenarioDashboardService implements OnModuleInit {
   // Worker ga manager qarori haqida xabar berish
   private async notifyWorkerDecision(
     requestId: number,
-    decision: 'approved' | 'rejected',
+    decision: RequestsStatusEnum,
     managerName: string,
     comment?: string,
     managerLang?: Lang,
@@ -1149,24 +1171,25 @@ export class ScenarioDashboardService implements OnModuleInit {
       if (!request || !request.worker) return;
 
       const worker: WorkerEntity = request.worker;
-      const workerLang: Lang = (worker.language as Lang) || 'uz';
+      const workerLang: Lang =
+        worker.language === language.RU ? language.RU : language.UZ;
 
       let messageText: string = '';
-      if (decision === 'approved') {
+      if (decision === RequestsStatusEnum.APPROVED) {
         messageText =
-          workerLang === 'ru'
+          workerLang === language.RU
             ? `✅ Ваш запрос #${requestId} одобрен!\n👨‍💼 Менеджер: ${managerName}`
             : `✅ #${requestId} soʼrovingiz tasdiqlandi!\n👨‍💼 Manager: ${managerName}`;
       } else {
         messageText =
-          workerLang === 'ru'
+          workerLang === language.RU
             ? `❌ Ваш запрос #${requestId} отклонён\n👨‍💼 Менеджер: ${managerName}`
             : `❌ #${requestId} soʼrovingiz rad etildi\n👨‍💼 Manager: ${managerName}`;
       }
 
       if (comment && comment.trim()) {
         messageText +=
-          workerLang === 'ru'
+          workerLang === language.RU
             ? `\n📝 Комментарий: ${comment}`
             : `\n📝 Izoh: ${comment}`;
       }

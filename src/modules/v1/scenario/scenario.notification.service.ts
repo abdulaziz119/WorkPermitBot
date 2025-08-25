@@ -1,17 +1,21 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { Cron, CronExpression } from '@nestjs/schedule';
+import { Cron } from '@nestjs/schedule';
 import { Telegraf } from 'telegraf';
 import { getBot } from './bot.instance';
 import { RequestsService } from '../requests/requests.service';
 import { ManagersService } from '../managers/managers.service';
-import { UserRoleEnum } from '../../../utils/enum/user.enum';
+import { UserRoleEnum, language } from '../../../utils/enum/user.enum';
 import { RequestsStatusEnum } from '../../../utils/enum/requests.enum';
+import { ManagerEntity } from '../../../entity/managers.entity';
+import { RequestEntity } from '../../../entity/requests.entity';
 
-type Lang = 'uz' | 'ru';
+type Lang = language.UZ | language.RU;
 
 @Injectable()
 export class ScenarioNotificationService {
-  private readonly logger = new Logger(ScenarioNotificationService.name);
+  private readonly logger: Logger = new Logger(
+    ScenarioNotificationService.name,
+  );
   private readonly bot: Telegraf;
 
   constructor(
@@ -42,7 +46,7 @@ export class ScenarioNotificationService {
     const thresholdDate = new Date();
     thresholdDate.setDate(thresholdDate.getDate() - daysThreshold);
 
-    const oldResponses =
+    const oldResponses: RequestEntity[] =
       await this.requests.findResponsesOlderThan(thresholdDate);
 
     if (oldResponses.length === 0) {
@@ -51,7 +55,7 @@ export class ScenarioNotificationService {
     }
 
     // Super admin manager larni topish
-    const superAdminManagers = await this.managers.findByRole(
+    const superAdminManagers: ManagerEntity[] = await this.managers.findByRole(
       UserRoleEnum.SUPER_ADMIN,
     );
 
@@ -80,10 +84,11 @@ export class ScenarioNotificationService {
     daysThreshold?: number,
   ): Promise<void> {
     try {
-      const managerLang: Lang = (manager.language as Lang) || 'uz';
+      const managerLang: Lang =
+        manager.language === language.RU ? language.RU : language.UZ;
 
-      let messageText =
-        managerLang === 'ru'
+      let messageText: string =
+        managerLang === language.RU
           ? '🚨 Уведомление о старых ответах\n\nСледующие работники получили ответ:\n\n'
           : '🚨 Eski javoblar haqida xabar\n\nQuyidagi ishchilar javob olgan:\n\n';
 
@@ -91,15 +96,15 @@ export class ScenarioNotificationService {
       oldResponses.forEach((response, index) => {
         const workerName =
           response.worker?.fullname || `Worker ID: ${response.worker_id}`;
-        const responseDate = new Date(response.updated_at).toLocaleDateString(
-          'uz-UZ',
-        );
-        const daysAgo = Math.floor(
+        const responseDate: string = new Date(
+          response.updated_at,
+        ).toLocaleDateString('uz-UZ');
+        const daysAgo: number = Math.floor(
           (Date.now() - new Date(response.updated_at).getTime()) /
             (1000 * 60 * 60 * 24),
         );
 
-        if (managerLang === 'ru') {
+        if (managerLang === language.RU) {
           messageText += `${index + 1}. 👤 ${workerName}\n`;
           messageText += `   📅 Ответ получен: ${responseDate} (${daysAgo} дней назад)\n`;
           messageText += `   📝 Статус: ${response.status === RequestsStatusEnum.APPROVED ? 'Одобрено ✅' : 'Отклонено ❌'}\n\n`;
@@ -113,36 +118,36 @@ export class ScenarioNotificationService {
       // Xabar uzunligi Telegram limitidan oshmasligi uchun tekshirish
       if (messageText.length > 4000) {
         // Eng eski va eng yangi javob kunlarini topish
-        const daysAgoList = oldResponses.map((response) =>
+        const daysAgoList: number[] = oldResponses.map((response) =>
           Math.floor(
             (Date.now() - new Date(response.updated_at).getTime()) /
               (1000 * 60 * 60 * 24),
           ),
         );
-        const minDays = Math.min(...daysAgoList);
-        const maxDays = Math.max(...daysAgoList);
+        const minDays: number = Math.min(...daysAgoList);
+        const maxDays: number = Math.max(...daysAgoList);
 
-        let daysText = '';
+        let daysText: string = '';
         if (minDays === maxDays) {
           daysText =
-            managerLang === 'ru'
+            managerLang === language.RU
               ? `${minDays} дней назад`
               : `${minDays} kun oldin`;
         } else {
           daysText =
-            managerLang === 'ru'
+            managerLang === language.RU
               ? `${minDays}-${maxDays} дней назад`
               : `${minDays}-${maxDays} kun oraliqda`;
         }
 
-        const thresholdText = daysThreshold
-          ? managerLang === 'ru'
+        const thresholdText: string = daysThreshold
+          ? managerLang === language.RU
             ? `более ${daysThreshold} дней назад`
             : `${daysThreshold} kundan ortiq oldin`
           : daysText;
 
         // Worker ismlarini qisqacha ro'yxat qilish
-        const workerNames = oldResponses
+        const workerNames: string = oldResponses
           .slice(0, 5) // Faqat birinchi 5 ta worker ismini ko'rsatish
           .map(
             (response) =>
@@ -150,15 +155,15 @@ export class ScenarioNotificationService {
           )
           .join(', ');
 
-        const remainingCount =
+        const remainingCount: number =
           oldResponses.length > 5 ? oldResponses.length - 5 : 0;
-        const workerListText =
+        const workerListText: string =
           remainingCount > 0
             ? `${workerNames} va yana ${remainingCount} ta`
             : workerNames;
 
-        const summaryText =
-          managerLang === 'ru'
+        const summaryText: string =
+          managerLang === language.RU
             ? `🚨 Уведомление о старых ответах\n\n📊 ${thresholdText} ответ получили:\n👥 ${workerListText}\n\nВсего: ${oldResponses.length} работников`
             : `🚨 Eski javoblar haqida xabar\n\n📊 ${thresholdText} javob olganlar:\n👥 ${workerListText}\n\nJami: ${oldResponses.length} ta ishchi`;
 
@@ -184,16 +189,15 @@ export class ScenarioNotificationService {
       const thresholdDate = new Date();
       thresholdDate.setDate(thresholdDate.getDate() - daysThreshold);
 
-      const oldResponses =
+      const oldResponses: RequestEntity[] =
         await this.requests.findResponsesOlderThan(thresholdDate);
 
       if (oldResponses.length === 0) {
         return `${daysThreshold} kundan ortiq eski javoblar topilmadi`;
       }
 
-      const superAdminManagers = await this.managers.findByRole(
-        UserRoleEnum.SUPER_ADMIN,
-      );
+      const superAdminManagers: ManagerEntity[] =
+        await this.managers.findByRole(UserRoleEnum.SUPER_ADMIN);
 
       if (superAdminManagers.length === 0) {
         return 'Super admin manager lar topilmadi';
