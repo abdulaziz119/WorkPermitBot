@@ -75,7 +75,7 @@ jobs:
   deploy-prod:
     if: github.ref == 'refs/heads/main'
     needs: docker-image
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     environment: production
     steps:
       - name: Add SSH key
