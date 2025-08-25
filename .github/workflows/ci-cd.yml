@@ -92,5 +92,14 @@ jobs:
 
       - name: Summary
         run: |
-          echo "## Image pushed" >> $GITHUB_STEP_SUMMARY
-          echo "${{ steps.meta.outputs.tags }}" | tr ' '
+          {
+            echo "## Image pushed"
+            echo
+            echo "### Tags"
+            for tag in ${{ steps.meta.outputs.tags }}; do
+              echo "- $tag"
+            done
+            echo
+            echo "### Digest"
+            echo "${{ steps.meta.outputs.digest }}"
+          } >> "$GITHUB_STEP_SUMMARY"
