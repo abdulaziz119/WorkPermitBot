@@ -17,7 +17,16 @@ import { WorkerEntity } from '../../../entity/workers.entity';
 import { ManagerEntity } from '../../../entity/managers.entity';
 import { RequestEntity } from '../../../entity/requests.entity';
 import { AttendanceEntity } from '../../../entity/attendance.entity';
-import { RequestsStatusEnum } from '../../../utils/enum/requests.enum';
+import {
+  RequestsStatusEnum,
+  RequestTypeEnum,
+  HourlyRequestTypeEnum,
+} from '../../../utils/enum/requests.enum';
+import {
+  getUzbekistanTime,
+  getCurrentHourInUzbekistan,
+  formatUzbekistanTime,
+} from '../../../utils/time/uzbekistan-time';
 
 type Ctx = Context & { session?: Record<string, any> };
 
@@ -45,6 +54,8 @@ const T = {
     btnCheckIn: 'Kelish (Check-in) ✅',
     btnCheckOut: 'Ketish (Check-out) 🕘',
     btnRequestLeave: 'Javob soʼrash 📝',
+    btnRequestDaily: '🗓 Kunlik javob (1+ kun)',
+    btnRequestHourly: '⏰ Soatlik javob (yarim kun)',
     btnMyRequests: 'Mening soʼrovlarim 📄',
     btnLateComment: 'Kech qolish sababi 💬',
     backBtn: 'Qaytish ◀',
@@ -73,7 +84,6 @@ const T = {
       'Iltimos, javob sababi va sanasini kiriting. Masalan: "22-avgust – oilaviy ishlar"',
     enterLateComment: 'Kech qolish sababini yozing:',
     lateCommentAdded: 'Kech qolish sababi saqlandi ✅',
-    noAttendanceToday: 'Bugun davomat qayd etilmagan',
     requestAccepted: (id: number) =>
       `Soʼrovingiz qabul qilindi (#${id}). Menejer tasdiqlashi kutilmoqda.`,
     newRequestNotify: (id: number, workerId: number, reason: string) =>
@@ -132,6 +142,8 @@ const T = {
     btnCheckIn: 'Пришёл (Check-in) ✅',
     btnCheckOut: 'Ушёл (Check-out) 🕘',
     btnRequestLeave: 'Запросить отгул 📝',
+    btnRequestDaily: '🗓 Дневной отгул (1+ день)',
+    btnRequestHourly: '⏰ Часовой отгул (полдня)',
     btnMyRequests: 'Мои запросы 📄',
     btnLateComment: 'Причина опоздания 💬',
     backBtn: 'Назад ◀',
@@ -260,7 +272,7 @@ export class ScenarioFrontendService implements OnModuleInit {
   private backKeyboard(lang: Lang) {
     const tr = T[lang];
     return Markup.inlineKeyboard([
-      [Markup.button.callback(tr.backBtn, 'back_to_menu')],
+      [Markup.button.callback(tr.backBtn, 'back_to_worker_menu')],
     ]);
   }
 
@@ -603,16 +615,150 @@ export class ScenarioFrontendService implements OnModuleInit {
       await ctx.reply(T[lang].checkOutDone, this.mainMenu(true, lang));
     });
 
-    // Worker: create request (two-step: date -> reason)
+    // Worker: create request (type selection)
     bot.action('request_leave', async (ctx) => {
       const tg = ctx.from;
       const lang = await this.getLang(ctx);
       const worker: WorkerEntity = await this.workers.findByTelegramId(tg.id);
       if (!worker || !worker.is_verified)
         return ctx.answerCbQuery(T[lang].notVerified);
+
+      const tr = T[lang];
+      const buttons = Markup.inlineKeyboard([
+        [Markup.button.callback(tr.btnRequestDaily, 'request_daily')],
+        [Markup.button.callback(tr.btnRequestHourly, 'request_hourly')],
+        [Markup.button.callback(tr.backBtn, 'back_to_worker_menu')],
+      ]);
+
+      await ctx.reply(
+        lang === language.RU ? 'Выберите тип отгула:' : 'Javob turini tanlang:',
+        buttons,
+      );
+    });
+
+    // Worker: daily request (1+ days, needs super admin approval)
+    bot.action('request_daily', async (ctx) => {
+      const tg = ctx.from;
+      const lang = await this.getLang(ctx);
+      const worker: WorkerEntity = await this.workers.findByTelegramId(tg.id);
+      if (!worker || !worker.is_verified)
+        return ctx.answerCbQuery(T[lang].notVerified);
       ctx.session ??= {};
-      ctx.session['req_flow'] = { step: 'await_date' };
+      ctx.session['req_flow'] = {
+        step: 'await_date',
+        type: RequestTypeEnum.DAILY,
+      };
       await ctx.reply(T[lang].enterDate, this.backKeyboard(lang));
+    });
+
+    // Worker: hourly request (half day, needs admin manager approval)
+    bot.action('request_hourly', async (ctx) => {
+      const tg = ctx.from;
+      const lang = await this.getLang(ctx);
+      const worker: WorkerEntity = await this.workers.findByTelegramId(tg.id);
+      if (!worker || !worker.is_verified)
+        return ctx.answerCbQuery(T[lang].notVerified);
+
+      ctx.session ??= {};
+      ctx.session['req_flow'] = {
+        step: 'select_hourly_type',
+        type: RequestTypeEnum.HOURLY,
+      };
+
+      const messageText =
+        lang === language.RU ? 'Выберите тип заявки:' : 'Javob turini tanlang:';
+
+      const buttons = [
+        [
+          Markup.button.callback(
+            lang === language.RU
+              ? '⏰ Прийти позже (опоздание)'
+              : '⏰ Kech kelish',
+            'hourly_coming_late',
+          ),
+        ],
+        [
+          Markup.button.callback(
+            lang === language.RU ? '🚪 Уйти раньше' : '🚪 Erta ketish',
+            'hourly_leaving_early',
+          ),
+        ],
+        [Markup.button.callback(T[lang].backBtn, 'back_to_worker_menu')],
+      ];
+
+      await ctx.reply(messageText, Markup.inlineKeyboard(buttons));
+    });
+
+    // Hourly request: Coming late
+    bot.action('hourly_coming_late', async (ctx) => {
+      const tg = ctx.from;
+      const lang = await this.getLang(ctx);
+      const worker: WorkerEntity = await this.workers.findByTelegramId(tg.id);
+      if (!worker || !worker.is_verified)
+        return ctx.answerCbQuery(T[lang].notVerified);
+
+      ctx.session ??= {};
+      ctx.session['req_flow'] = {
+        step: 'await_hourly_time',
+        type: RequestTypeEnum.HOURLY,
+        hourlyRequestType: HourlyRequestTypeEnum.COMING_LATE,
+      };
+
+      // Show current time to help user
+      const currentTime = getUzbekistanTime();
+      const currentTimeStr = `${String(currentTime.getHours()).padStart(2, '0')}:${String(currentTime.getMinutes()).padStart(2, '0')}`;
+
+      const messageText =
+        lang === language.RU
+          ? `Введите время прихода (9:00-19:00)\nТекущее время: ${currentTimeStr}\nПример: 12:30`
+          : `Kelish vaqtini kiriting (9:00-19:00)\nHozirgi vaqt: ${currentTimeStr}\nMisol: 12:30`;
+      await ctx.reply(messageText, this.backKeyboard(lang));
+    });
+
+    // Hourly request: Leaving early
+    bot.action('hourly_leaving_early', async (ctx) => {
+      const tg = ctx.from;
+      const lang = await this.getLang(ctx);
+      const worker: WorkerEntity = await this.workers.findByTelegramId(tg.id);
+      if (!worker || !worker.is_verified)
+        return ctx.answerCbQuery(T[lang].notVerified);
+
+      ctx.session ??= {};
+      ctx.session['req_flow'] = {
+        step: 'await_hourly_time',
+        type: RequestTypeEnum.HOURLY,
+        hourlyRequestType: HourlyRequestTypeEnum.LEAVING_EARLY,
+      };
+
+      // Show current time to help user
+      const currentTime = getUzbekistanTime();
+      const currentTimeStr = `${String(currentTime.getHours()).padStart(2, '0')}:${String(currentTime.getMinutes()).padStart(2, '0')}`;
+
+      const messageText =
+        lang === language.RU
+          ? `Введите время ухода (9:00-19:00)\nТекущее время: ${currentTimeStr}\nПример: 16:30`
+          : `Ketish vaqtini kiriting (9:00-19:00)\nHozirgi vaqt: ${currentTimeStr}\nMisol: 16:30`;
+      await ctx.reply(messageText, this.backKeyboard(lang));
+    });
+
+    // Back to worker main menu
+    bot.action('back_to_worker_menu', async (ctx) => {
+      const tg = ctx.from;
+      const lang = await this.getLang(ctx);
+      const worker: WorkerEntity = await this.workers.findByTelegramId(tg.id);
+      if (!worker || !worker.is_verified)
+        return ctx.answerCbQuery(T[lang].notVerified);
+
+      // Clear any pending flows
+      ctx.session ??= {};
+      ctx.session['req_flow'] = undefined;
+      ctx.session['awaiting_reason'] = false;
+      ctx.session['awaiting_late_comment'] = false;
+
+      await ctx.reply(
+        T[lang].greetingVerified(worker.fullname),
+        this.mainMenu(true, lang),
+      );
     });
 
     // Worker: add late comment
@@ -711,6 +857,7 @@ export class ScenarioFrontendService implements OnModuleInit {
         ctx.session['req_flow'] = {
           step: 'await_return_date',
           approvedDate: dt.toISOString(),
+          type: flow.type, // preserve request type
         };
         await ctx.reply(T[lang].enterReturnDate, this.backKeyboard(lang));
         return;
@@ -761,8 +908,92 @@ export class ScenarioFrontendService implements OnModuleInit {
           step: 'await_reason',
           approvedDate: flow.approvedDate,
           returnDate: dt.toISOString(),
+          type: flow.type, // preserve request type
         };
         await ctx.reply(T[lang].enterReasonShort, this.backKeyboard(lang));
+        return;
+      }
+      // Handle hourly time input
+      if (flow?.step === 'await_hourly_time') {
+        const tg = ctx.from;
+        const worker: WorkerEntity = await this.workers.findByTelegramId(tg.id);
+        const lang = await this.getLang(ctx);
+        if (!worker || !worker.is_verified) {
+          ctx.session['req_flow'] = undefined;
+          return ctx.reply(T[lang].notVerified);
+        }
+
+        const timeInput = ctx.message.text.trim();
+
+        // Validate time format (HH:MM)
+        const timeRegex = /^([01]?[0-9]|2[0-3]):([0-5][0-9])$/;
+        if (!timeRegex.test(timeInput)) {
+          const errorMsg =
+            lang === language.RU
+              ? 'Неверный формат времени! Введите время в формате ЧЧ:ММ (например: 14:30)'
+              : "Vaqt formati noto'g'ri! Vaqtni SS:DD formatida kiriting (masalan: 14:30)";
+          return ctx.reply(errorMsg, this.backKeyboard(lang));
+        }
+
+        const [hours, minutes] = timeInput.split(':').map(Number);
+
+        // Validate work hours (must be between 9:00 and 19:00 inclusive)
+        if (hours < 9 || hours > 19) {
+          const errorMsg =
+            lang === language.RU
+              ? 'Время должно быть между 9:00 и 19:00 (рабочие часы)!'
+              : "Vaqt 9:00 dan 19:00 gacha (ish vaqti) bo'lishi kerak!";
+          return ctx.reply(errorMsg, this.backKeyboard(lang));
+        }
+
+        // Get current Uzbekistan time for real-time validation
+        const currentUzbekTime = getUzbekistanTime();
+        const currentHour = currentUzbekTime.getHours();
+        const currentMinute = currentUzbekTime.getMinutes();
+
+        // Check if the requested time is in the past (real-time validation)
+        const requestedTimeInMinutes = hours * 60 + minutes;
+        const currentTimeInMinutes = currentHour * 60 + currentMinute;
+
+        if (requestedTimeInMinutes <= currentTimeInMinutes) {
+          const currentTimeStr = `${String(currentHour).padStart(2, '0')}:${String(currentMinute).padStart(2, '0')}`;
+          const errorMsg =
+            lang === language.RU
+              ? `Нельзя указать прошедшее время! Текущее время: ${currentTimeStr}. Укажите время позже текущего.`
+              : `O'tgan vaqtni kiritib bo'lmaydi! Hozirgi vaqt: ${currentTimeStr}. Hozirgi vaqtdan keyinroq vaqt kiriting.`;
+          return ctx.reply(errorMsg, this.backKeyboard(lang));
+        }
+
+        // Create the leave time with today's date and specified time
+        // Force exact time storage - user entered Uzbekistan time
+        const today = new Date();
+
+        // Get today's date in YYYY-MM-DD format
+        const year = today.getFullYear();
+        const month = String(today.getMonth() + 1).padStart(2, '0');
+        const date = String(today.getDate()).padStart(2, '0');
+
+        // Create exact time string that user entered (Uzbekistan timezone)
+        const userTimeStr = `${year}-${month}-${date} ${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:00`;
+
+        // Store as a simple string in session (we'll handle timezone in database)
+        ctx.session['req_flow'] = {
+          step: 'await_reason',
+          type: RequestTypeEnum.HOURLY,
+          hourlyLeaveTime: userTimeStr, // Store as string to avoid timezone conversion
+          hourlyRequestType: flow.hourlyRequestType, // Preserve the request type
+        };
+
+        // Log for debugging (can be removed later)
+        console.log(
+          `Time entered: ${hours}:${minutes}, Type: ${flow.hourlyRequestType}, Saved time: ${userTimeStr}`,
+        );
+
+        const reasonMsg =
+          lang === language.RU
+            ? 'Введите причину часового отгула:'
+            : 'Soatlik javob sababini kiriting:';
+        await ctx.reply(reasonMsg, this.backKeyboard(lang));
         return;
       }
       if (flow?.step === 'await_reason') {
@@ -774,24 +1005,66 @@ export class ScenarioFrontendService implements OnModuleInit {
           return ctx.reply(T[lang].notVerified);
         }
         const reason: string = ctx.message.text.trim();
-        const approvedDate: Date = flow.approvedDate
-          ? new Date(flow.approvedDate)
-          : undefined;
-        const returnDate: Date = flow.returnDate
-          ? new Date(flow.returnDate)
-          : undefined;
+
+        let approvedDate: Date;
+        let returnDate: Date;
+
+        // Handle hourly vs daily requests differently
+        if (flow.type === RequestTypeEnum.HOURLY) {
+          // For hourly requests, don't set approved_date and return_date
+          // Only set hourly_leave_time
+          approvedDate = undefined;
+          returnDate = undefined;
+
+          // No automatic attendance handling for hourly requests
+          // Manager will decide when to approve/reject
+        } else {
+          // For daily requests, use the dates from flow (existing logic)
+          approvedDate = flow.approvedDate
+            ? new Date(flow.approvedDate)
+            : undefined;
+          returnDate = flow.returnDate ? new Date(flow.returnDate) : undefined;
+        }
+
+        // Prepare hourlyLeaveTime and hourlyRequestType for hourly requests
+        let hourlyLeaveTime: Date | undefined;
+        let hourlyRequestType: HourlyRequestTypeEnum | undefined;
+        if (flow.type === RequestTypeEnum.HOURLY) {
+          if (flow.hourlyLeaveTime) {
+            // Convert the string to store exact time user entered
+            // flow.hourlyLeaveTime is in format: "2025-08-26 19:40:00"
+            const timeStr = flow.hourlyLeaveTime;
+            // Create date as if it's UTC to avoid timezone conversion
+            // This way 19:40 will be stored as 19:40, not converted to UTC
+            const isoTimeStr = timeStr.replace(' ', 'T') + 'Z';
+            hourlyLeaveTime = new Date(isoTimeStr);
+          } else {
+            hourlyLeaveTime = getUzbekistanTime();
+          }
+          hourlyRequestType = flow.hourlyRequestType;
+        }
+
         const req: RequestEntity = await this.requests.createRequest(
           worker.id,
           reason,
+          flow.type || RequestTypeEnum.DAILY,
           approvedDate,
           returnDate,
+          hourlyLeaveTime,
+          hourlyRequestType,
         );
+
+        // Log for debugging (can be removed later)
+        this.logger.log(
+          `Created hourly request: ID=${req.id}, Type=${hourlyRequestType}, Time=${hourlyLeaveTime?.toISOString()}`,
+        );
+
         ctx.session['req_flow'] = undefined;
         await ctx.reply(
           T[lang].requestAccepted(req.id),
           this.mainMenu(true, lang),
         );
-        await this.notifyManagersNewRequest(req.id, worker, reason);
+        await this.notifyManagersNewRequest(req, worker, reason);
         return; // stop here
       }
       // Legacy single-step fallback
@@ -807,6 +1080,7 @@ export class ScenarioFrontendService implements OnModuleInit {
         const req: RequestEntity = await this.requests.createRequest(
           worker.id,
           reason,
+          RequestTypeEnum.DAILY, // Default type for legacy flow
           undefined,
           undefined,
         );
@@ -815,7 +1089,7 @@ export class ScenarioFrontendService implements OnModuleInit {
           T[lang].requestAccepted(req.id),
           this.mainMenu(true, lang),
         );
-        await this.notifyManagersNewRequest(req.id, worker, reason);
+        await this.notifyManagersNewRequest(req, worker, reason);
         return;
       }
       // Handle late comment text input
@@ -867,79 +1141,151 @@ export class ScenarioFrontendService implements OnModuleInit {
           this.backKeyboard(lang),
         );
 
-      // Latest requests first (already sorted by created_at DESC from database)
-      const totalPages: number = Math.ceil(allRequests.length / pageSize);
-      const startIndex: number = (page - 1) * pageSize;
-      const endIndex: number = startIndex + pageSize;
-      const pageRequests: RequestEntity[] = allRequests.slice(
-        startIndex,
-        endIndex,
+      // Separate daily and hourly requests
+      const dailyRequests = allRequests.filter(
+        (r) => r.request_type === RequestTypeEnum.DAILY,
+      );
+      const hourlyRequests = allRequests.filter(
+        (r) => r.request_type === RequestTypeEnum.HOURLY,
       );
 
-      const lines: string = pageRequests
-        .map((r: RequestEntity): string => {
-          const statusText: string = this.statusLabel(lang, r.status);
-          const dateText: string = r.approved_date
-            ? ((): string => {
-                const d = new Date(r.approved_date);
-                const dd: string = String(d.getUTCDate()).padStart(2, '0');
-                const mm: string = String(d.getUTCMonth() + 1).padStart(2, '0');
-                const yyyy: number = d.getUTCFullYear();
-                return `📅 ${dd}.${mm}.${yyyy}`;
-              })()
-            : '';
-          const returnDateText: string = r.return_date
-            ? ((): string => {
-                const d = new Date(r.return_date);
-                const dd: string = String(d.getUTCDate()).padStart(2, '0');
-                const mm: string = String(d.getUTCMonth() + 1).padStart(2, '0');
-                const yyyy: number = d.getUTCFullYear();
-                return `🔄 ${dd}.${mm}.${yyyy}`;
-              })()
-            : '';
-          const reasonText = `📝 ${r.reason}`;
-          const commentText: string = r.manager_comment
-            ? `\n${T[lang].commentLabel}: ${r.manager_comment}`
-            : '';
+      // Helper function to format requests
+      const formatRequests = (
+        requests: RequestEntity[],
+        title: string,
+      ): string => {
+        if (!requests.length) return '';
 
-          const parts: string[] = [`#${r.id} • ${statusText}`];
-          if (dateText) parts.push(dateText);
-          if (returnDateText) parts.push(returnDateText);
-          parts.push(reasonText);
-          if (commentText) parts.push(commentText.trim());
+        const requestLines = requests
+          .slice(0, 3)
+          .map((r: RequestEntity): string => {
+            const statusText: string = this.statusLabel(lang, r.status);
 
-          return parts.join('\n');
-        })
-        .join('\n\n');
+            let dateInfo = '';
 
-      // Build navigation buttons
-      const navButtons = [];
-      const pageInfo: string = T[lang].pageInfo(page, totalPages);
+            // For hourly requests, use hourly_leave_time instead of approved_date
+            if (
+              r.request_type === RequestTypeEnum.HOURLY &&
+              r.hourly_leave_time
+            ) {
+              const leaveTime = new Date(r.hourly_leave_time);
+              const formattedTime = formatUzbekistanTime(leaveTime);
 
-      if (page > 1) {
-        navButtons.push(
-          Markup.button.callback(T[lang].prevBtn, `my_requests_${page - 1}`),
-        );
+              // Add type indicator
+              let typeIcon = '⏰';
+              let typeText = '';
+              if (r.hourly_request_type === HourlyRequestTypeEnum.COMING_LATE) {
+                typeIcon = '⏰';
+                typeText =
+                  lang === language.RU ? ' (Опоздание)' : ' (Kech kelish)';
+              } else if (
+                r.hourly_request_type === HourlyRequestTypeEnum.LEAVING_EARLY
+              ) {
+                typeIcon = '🚪';
+                typeText =
+                  lang === language.RU ? ' (Ранний уход)' : ' (Erta ketish)';
+              }
+
+              dateInfo = `${typeIcon} ${formattedTime}${typeText}`;
+            } else if (r.approved_date) {
+              const startDate = new Date(r.approved_date);
+              const startDD: string = String(startDate.getUTCDate()).padStart(
+                2,
+                '0',
+              );
+              const startMM: string = String(
+                startDate.getUTCMonth() + 1,
+              ).padStart(2, '0');
+              const startYYYY: number = startDate.getUTCFullYear();
+
+              // For daily requests, show date range
+              if (r.return_date) {
+                const endDate = new Date(r.return_date);
+                const endDD: string = String(endDate.getUTCDate()).padStart(
+                  2,
+                  '0',
+                );
+                const endMM: string = String(
+                  endDate.getUTCMonth() + 1,
+                ).padStart(2, '0');
+                const endYYYY: number = endDate.getUTCFullYear();
+                dateInfo = `📅 ${startDD}.${startMM}.${startYYYY} - ${endDD}.${endMM}.${endYYYY}`;
+              } else {
+                dateInfo = `📅 ${startDD}.${startMM}.${startYYYY}`;
+              }
+            }
+
+            const reasonText = `📝 ${r.reason}`;
+
+            // Show who approved/rejected
+            let approverText = '';
+            if (r.status !== RequestsStatusEnum.PENDING && r.approved_by) {
+              const approverName = r.approved_by.fullname;
+              const actionText =
+                r.status === RequestsStatusEnum.APPROVED
+                  ? lang === language.RU
+                    ? 'Одобрил'
+                    : 'Tasdiqladi'
+                  : lang === language.RU
+                    ? 'Отклонил'
+                    : 'Rad etdi';
+              approverText = `� ${actionText}: ${approverName}`;
+            }
+
+            const commentText: string = r.manager_comment
+              ? `💬 ${r.manager_comment}`
+              : '';
+
+            const parts: string[] = [`#${r.id} • ${statusText}`];
+            if (dateInfo) parts.push(dateInfo);
+            parts.push(reasonText);
+            if (approverText) parts.push(approverText);
+            if (commentText) parts.push(commentText);
+
+            return parts.join('\n');
+          })
+          .join('\n\n');
+
+        return `${title}\n${requestLines}`;
+      };
+
+      // Format the message
+      let message = T[lang].btnMyRequests + '\n\n';
+
+      const dailyTitle =
+        lang === language.RU ? '📋 ЕЖЕДНЕВНЫЕ ЗАЯВКИ:' : '📋 KUNLIK JAVOBLAR:';
+      const hourlyTitle =
+        lang === language.RU ? '⏰ ЧАСОВЫЕ ЗАЯВКИ:' : '⏰ SOATLIK JAVOBLAR:';
+
+      const dailySection = formatRequests(dailyRequests, dailyTitle);
+      const hourlySection = formatRequests(hourlyRequests, hourlyTitle);
+
+      if (dailySection) {
+        message += dailySection + '\n\n';
       }
 
-      if (page < totalPages) {
-        navButtons.push(
-          Markup.button.callback(T[lang].nextBtn, `my_requests_${page + 1}`),
-        );
+      if (hourlySection) {
+        message += hourlySection + '\n\n';
       }
 
-      const buttons = [];
-      if (navButtons.length > 0) {
-        buttons.push(navButtons);
-      }
-      buttons.push([Markup.button.callback(T[lang].backBtn, 'back_to_menu')]);
+      // Show count info
+      const totalDaily = dailyRequests.length;
+      const totalHourly = hourlyRequests.length;
+      const countInfo =
+        lang === language.RU
+          ? `📊 Всего: Ежедневных: ${totalDaily}, Часовых: ${totalHourly}`
+          : `📊 Jami: Kunlik: ${totalDaily}, Soatlik: ${totalHourly}`;
 
-      const message = `${T[lang].btnMyRequests}\n${pageInfo}\n\n${lines}`;
+      message += countInfo;
+
+      const buttons = [
+        [Markup.button.callback(T[lang].backBtn, 'back_to_worker_menu')],
+      ];
 
       await this.replyFresh(ctx, message, Markup.inlineKeyboard(buttons));
     });
 
-    // Back to main menu from lists
+    // Back to main menu from lists (legacy handler)
     bot.action('back_to_menu', async (ctx) => {
       const lang = await this.getLang(ctx);
       const tgId: number = Number(ctx.from?.id);
@@ -972,7 +1318,7 @@ export class ScenarioFrontendService implements OnModuleInit {
               ),
             ],
             [Markup.button.callback(T[lang].btnMyRequests, 'my_requests')],
-            [Markup.button.callback(T[lang].backBtn, 'back_to_menu')],
+            [Markup.button.callback(T[lang].backBtn, 'back_to_worker_menu')],
           ]);
           return this.replyFresh(
             ctx,
@@ -1209,29 +1555,46 @@ export class ScenarioFrontendService implements OnModuleInit {
     }
   }
 
-  // Yangi request haqida faqat super admin managerlarni xabardor qilish tugmalar bilan
+  // Yangi request haqida managerlarni xabardor qilish (type asosida)
   private async notifyManagersNewRequest(
-    requestId: number,
+    request: RequestEntity,
     worker: any,
     reason: string,
   ): Promise<void> {
     try {
       const managers: ManagerEntity[] = await this.managers.listActive();
 
-      // Faqat super admin rolega ega managerlarni filtrlash
-      const superAdminManagers: ManagerEntity[] = managers.filter(
-        (manager: ManagerEntity): boolean =>
-          manager.role === UserRoleEnum.SUPER_ADMIN,
-      );
+      let targetManagers: ManagerEntity[] = [];
 
-      // Load request to access approved_date and return_date
-      const request: RequestEntity =
-        await this.requests.findByIdWithWorker(requestId);
+      if (request.request_type === RequestTypeEnum.DAILY) {
+        // Kunlik javob - faqat super admin managerlar
+        targetManagers = managers.filter(
+          (manager: ManagerEntity): boolean =>
+            manager.role === UserRoleEnum.SUPER_ADMIN,
+        );
+      } else if (request.request_type === RequestTypeEnum.HOURLY) {
+        // Soatlik javob - admin role managerlar
+        targetManagers = managers.filter(
+          (manager: ManagerEntity): boolean =>
+            manager.role === UserRoleEnum.ADMIN,
+        );
+      }
+
       const approvedDate: Date | null = request?.approved_date || null;
       const returnDate: Date | null = request?.return_date || null;
 
-      for (const manager of superAdminManagers) {
+      for (const manager of targetManagers) {
         const isRu: boolean = manager.language === 'ru';
+
+        // Request type info
+        const typeInfo: string =
+          request.request_type === RequestTypeEnum.DAILY
+            ? isRu
+              ? '🗓 Дневной отгул'
+              : '🗓 Kunlik javob'
+            : isRu
+              ? '⏰ Часовой отгул'
+              : '⏰ Soatlik javob';
 
         let dateInfo: string = '';
         let daysInfo: string = '';
@@ -1245,7 +1608,12 @@ export class ScenarioFrontendService implements OnModuleInit {
           );
           const startYYYY: number = startDate.getFullYear();
 
-          if (returnDate) {
+          // For hourly requests, show time as well
+          if (request.request_type === RequestTypeEnum.HOURLY) {
+            // Format start date with Uzbekistan timezone
+            const formattedTime = formatUzbekistanTime(startDate);
+            dateInfo = `📅 ${formattedTime}`;
+          } else if (returnDate) {
             const endDate = new Date(returnDate);
             const endDD: string = String(endDate.getDate()).padStart(2, '0');
             const endMM: string = String(endDate.getMonth() + 1).padStart(
@@ -1270,6 +1638,31 @@ export class ScenarioFrontendService implements OnModuleInit {
           }
         }
 
+        // Format request creation time for display
+        const requestTime = formatUzbekistanTime(request.created_at);
+        const requestTimeInfo = isRu 
+          ? `⏰ Время запроса: ${requestTime}`
+          : `⏰ So'rov vaqti: ${requestTime}`;
+
+        // Add hourly request type information
+        let hourlyTypeInfo = '';
+        if (request.request_type === RequestTypeEnum.HOURLY && request.hourly_request_type) {
+          const typeText = request.hourly_request_type === HourlyRequestTypeEnum.COMING_LATE 
+            ? (isRu ? 'Опоздание' : 'Kechikish')
+            : (isRu ? 'Ранний уход' : 'Erta ketish');
+          
+          if (request.hourly_leave_time) {
+            const leaveTime = formatUzbekistanTime(request.hourly_leave_time);
+            hourlyTypeInfo = isRu 
+              ? `🕐 Тип: ${typeText} (${leaveTime})`
+              : `🕐 Turi: ${typeText} (${leaveTime})`;
+          } else {
+            hourlyTypeInfo = isRu 
+              ? `🕐 Тип: ${typeText}`
+              : `🕐 Turi: ${typeText}`;
+          }
+        }
+
         const header = isRu
           ? '🔔 Новый запрос на отгул!'
           : "🔔 Yangi ruxsat so'rovi!";
@@ -1282,9 +1675,12 @@ export class ScenarioFrontendService implements OnModuleInit {
         const messageText: string = [
           header,
           '',
+          typeInfo,
           workerLine,
           dateInfo,
           daysInfo,
+          requestTimeInfo,
+          hourlyTypeInfo,
           reasonLine,
         ]
           .filter(Boolean)
@@ -1294,11 +1690,11 @@ export class ScenarioFrontendService implements OnModuleInit {
           [
             Markup.button.callback(
               isRu ? 'Одобрить ✅' : 'Tasdiqlash ✅',
-              `approve_${requestId}`,
+              `approve_${request.id}`,
             ),
             Markup.button.callback(
               isRu ? 'Отклонить ❌' : 'Rad etish ❌',
-              `reject_${requestId}`,
+              `reject_${request.id}`,
             ),
           ],
         ]);

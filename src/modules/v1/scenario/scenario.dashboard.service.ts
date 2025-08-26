@@ -12,7 +12,12 @@ import { ManagerEntity } from '../../../entity/managers.entity';
 import { RequestEntity } from '../../../entity/requests.entity';
 import { WorkerEntity } from '../../../entity/workers.entity';
 import { AttendanceEntity } from '../../../entity/attendance.entity';
-import { RequestsStatusEnum } from '../../../utils/enum/requests.enum';
+import {
+  RequestsStatusEnum,
+  RequestTypeEnum,
+  HourlyRequestTypeEnum,
+} from '../../../utils/enum/requests.enum';
+import { formatUzbekistanTime } from '../../../utils/time/uzbekistan-time';
 
 type Ctx = Context & { session?: Record<string, any> };
 type Lang = language.UZ | language.RU;
@@ -294,7 +299,17 @@ export class ScenarioDashboardService implements OnModuleInit {
       try {
         await ctx.editMessageReplyMarkup(undefined);
       } catch {}
-      const pending: RequestEntity[] = await this.requests.listPending();
+
+      // Role-based request filtering
+      let pending: RequestEntity[] = [];
+      if (manager.role === UserRoleEnum.SUPER_ADMIN) {
+        // Super admin sees all pending requests
+        pending = await this.requests.listPending();
+      } else if (manager.role === UserRoleEnum.ADMIN) {
+        // Admin only sees hourly requests
+        pending = await this.requests.listPendingHourly();
+      }
+
       if (!pending.length)
         return ctx.editMessageText(
           T[lang].pendingEmpty,
@@ -306,11 +321,35 @@ export class ScenarioDashboardService implements OnModuleInit {
         const workerName: string =
           r.worker?.fullname || `Worker ID: ${r.worker_id}`;
 
+        // Request type indicator
+        const typeIcon: string =
+          r.request_type === RequestTypeEnum.DAILY ? '🗓' : '⏰';
+
         // Format dates and calculate days
         let dateInfo: string = '';
         let daysCount: string = '';
 
-        if (r.approved_date) {
+        // For hourly requests, use hourly_leave_time instead of approved_date
+        if (r.request_type === RequestTypeEnum.HOURLY && r.hourly_leave_time) {
+          const leaveTime = new Date(r.hourly_leave_time);
+          const formattedTime = formatUzbekistanTime(leaveTime);
+
+          // Add type indicator
+          let typeIcon = '⏰';
+          let typeText = '';
+          if (r.hourly_request_type === HourlyRequestTypeEnum.COMING_LATE) {
+            typeIcon = '⏰';
+            typeText = lang === language.RU ? ' (Опоздание)' : ' (Kech kelish)';
+          } else if (
+            r.hourly_request_type === HourlyRequestTypeEnum.LEAVING_EARLY
+          ) {
+            typeIcon = '🚪';
+            typeText =
+              lang === language.RU ? ' (Ранний уход)' : ' (Erta ketish)';
+          }
+
+          dateInfo = `${typeIcon} ${formattedTime}${typeText}`;
+        } else if (r.approved_date) {
           const startDate = new Date(r.approved_date);
           const startDD: string = String(startDate.getUTCDate()).padStart(
             2,
@@ -322,6 +361,7 @@ export class ScenarioDashboardService implements OnModuleInit {
           );
           const startYYYY: number = startDate.getUTCFullYear();
 
+          // For daily requests with return dates
           if (r.return_date) {
             const endDate = new Date(r.return_date);
             const endDD: string = String(endDate.getUTCDate()).padStart(2, '0');
@@ -345,11 +385,36 @@ export class ScenarioDashboardService implements OnModuleInit {
           }
         }
 
+        // Format request creation time for display
+        const requestTime = formatUzbekistanTime(r.created_at);
+        const timeInfo = `⏰ ${requestTime}`;
+
+        // Add hourly request type information
+        let hourlyTypeInfo = '';
+        if (
+          r.request_type === RequestTypeEnum.HOURLY &&
+          r.hourly_request_type
+        ) {
+          const typeText =
+            r.hourly_request_type === HourlyRequestTypeEnum.COMING_LATE
+              ? 'Kechikish'
+              : 'Erta ketish';
+
+          if (r.hourly_leave_time) {
+            const leaveTime = formatUzbekistanTime(r.hourly_leave_time);
+            hourlyTypeInfo = `🕐 ${typeText}: ${leaveTime}`;
+          } else {
+            hourlyTypeInfo = `🕐 ${typeText}`;
+          }
+        }
+
         const messageText: string = [
-          `#${r.id}`,
+          `${typeIcon} #${r.id}`,
           `👤 ${workerName}`,
           dateInfo,
           daysCount,
+          timeInfo,
+          hourlyTypeInfo,
           `📝 ${r.reason}`,
         ]
           .filter(Boolean)
@@ -1437,7 +1502,10 @@ export class ScenarioDashboardService implements OnModuleInit {
           );
       }
     } catch (e: any) {
-      this.logger.error('notifyOtherSuperAdminsAboutApproval error', e?.message || e);
+      this.logger.error(
+        'notifyOtherSuperAdminsAboutApproval error',
+        e?.message || e,
+      );
     }
   }
 }
