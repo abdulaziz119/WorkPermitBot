@@ -1374,8 +1374,70 @@ export class ScenarioDashboardService implements OnModuleInit {
             `Could not notify worker ${worker.id} about decision: ${e.message}`,
           ),
         );
+
+      // Agar tasdiqlangan bo'lsa, boshqa super adminlarga ham xabar berish
+      if (decision === RequestsStatusEnum.APPROVED) {
+        await this.notifyOtherSuperAdminsAboutApproval(
+          requestId,
+          worker,
+          managerName,
+          comment,
+        );
+      }
     } catch (e: any) {
       this.logger.error('notifyWorkerDecision error', e?.message || e);
+    }
+  }
+
+  // Boshqa super adminlarga tasdiqlash haqida xabar berish
+  private async notifyOtherSuperAdminsAboutApproval(
+    requestId: number,
+    worker: WorkerEntity,
+    approverName: string,
+    comment?: string,
+  ): Promise<void> {
+    try {
+      const superAdmins: ManagerEntity[] = await this.managers.findByRole(
+        UserRoleEnum.SUPER_ADMIN,
+      );
+
+      if (superAdmins.length === 0) return;
+
+      // Har bir super admin ga xabar yuborish
+      for (const admin of superAdmins) {
+        const adminLang: Lang =
+          admin.language === language.RU ? language.RU : language.UZ;
+
+        let messageText: string = '';
+        if (adminLang === language.RU) {
+          messageText = `✅ Запрос одобрен!\n\n`;
+          messageText += `📋 ID: #${requestId}\n`;
+          messageText += `👤 Работник: ${worker.fullname}\n`;
+          messageText += `👨‍💼 Одобрил: ${approverName}`;
+        } else {
+          messageText = `✅ So'rov tasdiqlandi!\n\n`;
+          messageText += `📋 ID: #${requestId}\n`;
+          messageText += `👤 Ishchi: ${worker.fullname}\n`;
+          messageText += `👨‍💼 Tasdiqlagan: ${approverName}`;
+        }
+
+        if (comment && comment.trim()) {
+          messageText +=
+            adminLang === language.RU
+              ? `\n📝 Комментарий: ${comment}`
+              : `\n📝 Izoh: ${comment}`;
+        }
+
+        await this.bot.telegram
+          .sendMessage(admin.telegram_id, messageText)
+          .catch((e) =>
+            this.logger.warn(
+              `Could not notify super admin ${admin.id} about approval: ${e.message}`,
+            ),
+          );
+      }
+    } catch (e: any) {
+      this.logger.error('notifyOtherSuperAdminsAboutApproval error', e?.message || e);
     }
   }
 }
