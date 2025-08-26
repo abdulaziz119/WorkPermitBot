@@ -10,6 +10,8 @@ const DB_SCHEMA = process.env.DB_SCHEMA || '';
 
 const TELEGRAM_BOT_TOKEN = process.env.BOT_TOKEN || '';
 
+const JWT_SECRET = process.env.JWT_SECRET || '';
+
 const PORT = process.env.PORT || 3000;
 
 const SMTP_USER = process.env.SMTP_USER || '';
@@ -39,6 +41,7 @@ if (!DB_SCHEMA || !DB_HOST || !DB_USER || !DB_DB || !DB_PASS) {
 }
 
 export {
+  JWT_SECRET,
   SMTP_USER,
   SMTP_PASS,
   TELEGRAM_BOT_TOKEN,
