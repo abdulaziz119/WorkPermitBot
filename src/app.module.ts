@@ -16,7 +16,7 @@ import { HealthController } from './health.controller';
   ],
   controllers: [HealthController],
 })
-export class AppFrontendModule implements NestModule {
+export class AppModule implements NestModule {
   configure(consumer: MiddlewareConsumer) {
     consumer.apply(LoggerMiddleware).forRoutes('*');
   }
