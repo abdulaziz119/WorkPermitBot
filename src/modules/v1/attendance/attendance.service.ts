@@ -167,4 +167,37 @@ export class AttendanceService {
       .addOrderBy('a.created_at', 'DESC')
       .getMany();
   }
+
+  async addLateComment(
+    workerId: number,
+    comment: string,
+    onDate = new Date(),
+  ): Promise<AttendanceEntity> {
+    const now = nowInTz();
+    let today: AttendanceEntity | null = await this.getToday(workerId, onDate);
+
+    if (!today) {
+      // Create attendance record if it doesn't exist
+      const day = startOfDay(onDate);
+      const yyyy = day.getFullYear();
+      const mm = String(day.getMonth() + 1).padStart(2, '0');
+      const dd = String(day.getDate()).padStart(2, '0');
+      const dateStr = `${yyyy}-${mm}-${dd}`;
+
+      today = this.repo.create({
+        worker_id: workerId,
+        date: dateStr,
+        check_in: null,
+        check_out: null,
+        late_comment: comment.trim(),
+        comment_time: now,
+      });
+    } else {
+      // Update existing record
+      today.late_comment = comment.trim();
+      today.comment_time = now;
+    }
+
+    return this.repo.save(today);
+  }
 }

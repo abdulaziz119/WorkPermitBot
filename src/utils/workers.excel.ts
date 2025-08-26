@@ -16,7 +16,7 @@ export class WorkersExcelService {
     const lines: string[] = [];
 
     // Header in Uzbek
-    lines.push('Ishchi nomi,Telegram ID,Sana,Kelish vaqti,Ketish vaqti,Holati');
+    lines.push('Ishchi nomi,Telegram ID,Sana,Kelish vaqti,Ketish vaqti,Holati,Kech qolish sababi');
 
     for (const item of data) {
       const worker = item.worker;
@@ -25,7 +25,7 @@ export class WorkersExcelService {
         const hasLeaveRequest = item.requests && item.requests.length > 0;
         const status = hasLeaveRequest ? "Javob so'ragan" : 'Kelmagan';
         lines.push(
-          `"${worker.fullname}",${worker.telegram_id},Yozuv yo'q,,,${status}`,
+          `"${worker.fullname}",${worker.telegram_id},Yozuv yo'q,,,${status},`,
         );
       } else {
         for (const att of item.attendances) {
@@ -58,8 +58,9 @@ export class WorkersExcelService {
 
           const date =
             att.date || new Date(att.created_at).toLocaleDateString();
+          const lateComment = att.late_comment ? `"${att.late_comment}"` : '';
           lines.push(
-            `"${worker.fullname}",${worker.telegram_id},"${date}","${checkIn}","${checkOut}","${status}"`,
+            `"${worker.fullname}",${worker.telegram_id},"${date}","${checkIn}","${checkOut}","${status}",${lateComment}`,
           );
         }
       }

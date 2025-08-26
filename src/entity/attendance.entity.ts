@@ -21,4 +21,10 @@ export class AttendanceEntity extends BaseEntity {
 
   @Column({ type: 'timestamp', nullable: true })
   check_out: Date | null; // ishni tark etgan vaqti
+
+  @Column({ type: 'text', nullable: true })
+  late_comment: string | null; // kech qolish sababi
+
+  @Column({ type: 'timestamp', nullable: true })
+  comment_time: Date | null; // comment qo'shilgan vaqt
 }

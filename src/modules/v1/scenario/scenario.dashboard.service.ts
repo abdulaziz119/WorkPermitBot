@@ -782,13 +782,30 @@ export class ScenarioDashboardService implements OnModuleInit {
 
       const buttons: any[] = [];
 
-      // Worker buttons with attendance status
+      // Get today's attendance and approved leave data for all workers
+      const workerIds = result.workers.map(w => w.id);
+      const attendanceMap = await this.attendance.getTodayForWorkers(workerIds);
+      const approvedLeaveMap = await this.requests.getApprovedLeaveForToday(workerIds);
+
+      // Worker buttons with enhanced attendance status
       for (const worker of result.workers) {
-        const todayAttendance: AttendanceEntity =
-          await this.attendance.getToday(worker.id);
-        const status = todayAttendance?.check_in
-          ? T[lang].attendancePresent
-          : T[lang].attendanceAbsent;
+        const todayAttendance = attendanceMap.get(worker.id);
+        const hasApprovedLeave = approvedLeaveMap.get(worker.id) || false;
+        
+        let status: string;
+        if (hasApprovedLeave) {
+          // Worker has approved leave today
+          status = lang === language.RU ? '📋 Отгул одобрен' : '📋 Javob berilgan';
+        } else if (todayAttendance?.check_in) {
+          // Worker checked in (prioritize over late comment)
+          status = T[lang].attendancePresent;
+        } else if (todayAttendance?.late_comment) {
+          // Worker submitted late comment but hasn't checked in yet
+          status = lang === language.RU ? '⏰ Опоздал (не пришёл)' : '⏰ Kech qoldi (kelmagan)';
+        } else {
+          // Worker absent
+          status = T[lang].attendanceAbsent;
+        }
 
         buttons.push([
           Markup.button.callback(
@@ -853,7 +870,20 @@ export class ScenarioDashboardService implements OnModuleInit {
         ? T[lang].attendancePresent
         : T[lang].attendanceAbsent;
 
-      const message = `👤 ${worker.fullname}\n${T[lang].attendanceToday}: ${status}\n\nDavomat hisobotini yuklab olish:`;
+      let message = `👤 ${worker.fullname}\n${T[lang].attendanceToday}: ${status}`;
+
+      // Show late comment if exists
+      if (todayAttendance?.late_comment) {
+        const commentTime = todayAttendance.comment_time
+          ? new Date(todayAttendance.comment_time).toLocaleTimeString()
+          : '';
+        message += `\n💬 ${lang === language.RU ? 'Причина опоздания' : 'Kech qolish sababi'}: ${todayAttendance.late_comment}`;
+        if (commentTime) {
+          message += ` (${commentTime})`;
+        }
+      }
+
+      message += '\n\nDavomat hisobotini yuklab olish:';
 
       const buttons = [
         [

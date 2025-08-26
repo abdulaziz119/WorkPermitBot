@@ -129,4 +129,55 @@ export class RequestsService {
       .orderBy('request.updated_at', 'DESC')
       .getMany();
   }
+
+  // Check if workers have approved leave for today
+  async getApprovedLeaveForToday(workerIds: number[]): Promise<Map<number, boolean>> {
+    if (!workerIds.length) return new Map();
+    
+    const today = new Date();
+    const todayY = today.getUTCFullYear();
+    const todayM = today.getUTCMonth();
+    const todayD = today.getUTCDate();
+    
+    const requests = await this.repo
+      .createQueryBuilder('request')
+      .where('request.worker_id IN (:...workerIds)', { workerIds })
+      .andWhere('request.status = :approved', { approved: RequestsStatusEnum.APPROVED })
+      .andWhere('request.approved_date IS NOT NULL')
+      .getMany();
+
+    const approvedMap = new Map<number, boolean>();
+    
+    // Initialize all workers as false
+    for (const workerId of workerIds) {
+      approvedMap.set(workerId, false);
+    }
+    
+    // Check if any request covers today
+    for (const r of requests) {
+      if (!r.approved_date) continue;
+      
+      const start = new Date(r.approved_date);
+      const end = r.return_date ? new Date(r.return_date) : start;
+      
+      const startY = start.getUTCFullYear();
+      const startM = start.getUTCMonth(); 
+      const startD = start.getUTCDate();
+      const endY = end.getUTCFullYear();
+      const endM = end.getUTCMonth();
+      const endD = end.getUTCDate();
+      
+      // Check if today falls within the approved period
+      const afterOrEqStart = todayY > startY || 
+        (todayY === startY && (todayM > startM || (todayM === startM && todayD >= startD)));
+      const beforeOrEqEnd = todayY < endY || 
+        (todayY === endY && (todayM < endM || (todayM === endM && todayD <= endD)));
+        
+      if (afterOrEqStart && beforeOrEqEnd) {
+        approvedMap.set(r.worker_id, true);
+      }
+    }
+    
+    return approvedMap;
+  }
 }

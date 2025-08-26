@@ -46,6 +46,7 @@ const T = {
     btnCheckOut: 'Ketish (Check-out) 🕘',
     btnRequestLeave: 'Javob soʼrash 📝',
     btnMyRequests: 'Mening soʼrovlarim 📄',
+    btnLateComment: 'Kech qolish sababi 💬',
     backBtn: 'Qaytish ◀',
     btnWaiting: 'Tasdiqlashni kutish ⏳',
     statusPending: 'Kutilmoqda',
@@ -70,6 +71,9 @@ const T = {
     enterReasonShort: 'Sababni yozing (masalan: oilaviy ishlar).',
     enterReason:
       'Iltimos, javob sababi va sanasini kiriting. Masalan: "22-avgust – oilaviy ishlar"',
+    enterLateComment: 'Kech qolish sababini yozing:',
+    lateCommentAdded: 'Kech qolish sababi saqlandi ✅',
+    noAttendanceToday: 'Bugun davomat qayd etilmagan',
     requestAccepted: (id: number) =>
       `Soʼrovingiz qabul qilindi (#${id}). Menejer tasdiqlashi kutilmoqda.`,
     newRequestNotify: (id: number, workerId: number, reason: string) =>
@@ -129,6 +133,7 @@ const T = {
     btnCheckOut: 'Ушёл (Check-out) 🕘',
     btnRequestLeave: 'Запросить отгул 📝',
     btnMyRequests: 'Мои запросы 📄',
+    btnLateComment: 'Причина опоздания 💬',
     backBtn: 'Назад ◀',
     btnWaiting: 'Ожидается подтверждение ⏳',
     statusPending: 'В ожидании',
@@ -151,6 +156,9 @@ const T = {
     enterReasonShort: 'Введите причину (например: семейные дела).',
     enterReason:
       'Пожалуйста, введите причину и дату. Например: "22-августа – семейные дела"',
+    enterLateComment: 'Введите причину опоздания:',
+    lateCommentAdded: 'Причина опоздания сохранена ✅',
+    noAttendanceToday: 'Сегодня посещаемость не зарегистрирована',
     requestAccepted: (id: number) =>
       `Ваш запрос принят (#${id}). Ожидается подтверждение менеджера.`,
     newRequestNotify: (id: number, workerId: number, reason: string) =>
@@ -242,6 +250,7 @@ export class ScenarioFrontendService implements OnModuleInit {
         Markup.button.callback(tr.btnRequestLeave, 'request_leave'),
       ]);
       buttons.push([Markup.button.callback(tr.btnMyRequests, 'my_requests')]);
+      buttons.push([Markup.button.callback(tr.btnLateComment, 'late_comment')]);
     } else {
       buttons.push([Markup.button.callback(tr.btnWaiting, 'noop')]);
     }
@@ -606,6 +615,21 @@ export class ScenarioFrontendService implements OnModuleInit {
       await ctx.reply(T[lang].enterDate, this.backKeyboard(lang));
     });
 
+    // Worker: add late comment
+    bot.action('late_comment', async (ctx) => {
+      const tg = ctx.from;
+      const lang = await this.getLang(ctx);
+      const worker: WorkerEntity = await this.workers.findByTelegramId(tg.id);
+      if (!worker || !worker.is_verified)
+        return ctx.answerCbQuery(T[lang].notVerified);
+
+      // Allow late comment even if no attendance record exists yet
+      // This will be created when the comment is submitted
+      ctx.session ??= {};
+      ctx.session['awaiting_late_comment'] = true;
+      await ctx.reply(T[lang].enterLateComment, this.backKeyboard(lang));
+    });
+
     bot.on('text', async (ctx, next) => {
       // Step: collect fullname after role selection
       if (ctx.session?.step === 'await_fullname' && ctx.session?.pending_role) {
@@ -794,6 +818,32 @@ export class ScenarioFrontendService implements OnModuleInit {
         await this.notifyManagersNewRequest(req.id, worker, reason);
         return;
       }
+      // Handle late comment text input
+      if (ctx.session?.['awaiting_late_comment']) {
+        const tg = ctx.from;
+        const worker: WorkerEntity = await this.workers.findByTelegramId(tg.id);
+        const lang = await this.getLang(ctx);
+        if (!worker || !worker.is_verified) {
+          ctx.session['awaiting_late_comment'] = false;
+          return ctx.reply(T[lang].notVerified);
+        }
+        const comment: string = ctx.message.text.trim();
+        if (comment.length < 3) {
+          await ctx.reply(
+            lang === language.RU
+              ? 'Слишком короткий комментарий. Минимум 3 символа.'
+              : 'Juda qisqa izoh. Kamida 3 ta belgi.',
+            this.backKeyboard(lang),
+          );
+          return;
+        }
+
+        const result = await this.attendance.addLateComment(worker.id, comment);
+        ctx.session['awaiting_late_comment'] = false;
+
+        await ctx.reply(T[lang].lateCommentAdded, this.mainMenu(true, lang));
+        return;
+      }
       return next();
     });
 
@@ -897,6 +947,7 @@ export class ScenarioFrontendService implements OnModuleInit {
       if (ctx.session) {
         ctx.session['req_flow'] = undefined;
         ctx.session['awaiting_reason'] = false;
+        ctx.session['awaiting_late_comment'] = false;
         ctx.session['step'] = undefined;
         ctx.session['pending_role'] = undefined;
       }
