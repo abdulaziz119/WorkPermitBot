@@ -234,6 +234,8 @@ export class ScenarioFrontendService implements OnModuleInit {
     const tr = T[lang];
     const buttons = [] as any[];
     if (isVerified) {
+      // NOTE: We don't know worker context here (no ctx). Basic menu without leave-day logic.
+      // Leave-day specific disabling handled in replyFresh/back_to_menu where we can evaluate worker.
       buttons.push([Markup.button.callback(tr.btnCheckIn, 'check_in')]);
       buttons.push([Markup.button.callback(tr.btnCheckOut, 'check_out')]);
       buttons.push([
@@ -303,6 +305,48 @@ export class ScenarioFrontendService implements OnModuleInit {
     )
       return null;
     return dt;
+  }
+
+  // Faqat tasdiqlangan (APPROVED) javob bugungi kunga to'g'ri keladimi tekshirish
+  private async hasLeaveForToday(workerId: number): Promise<boolean> {
+    try {
+      const requests: RequestEntity[] =
+        await this.requests.listByWorker(workerId);
+      if (!requests || !requests.length) return false;
+      const today = new Date();
+      const todayY: number = today.getUTCFullYear();
+      const todayM: number = today.getUTCMonth();
+      const todayD: number = today.getUTCDate();
+      for (const r of requests) {
+        // Only consider APPROVED requests (pending/rejected ignored)
+        if (r.status !== RequestsStatusEnum.APPROVED) continue;
+        if (!r.approved_date) continue; // must have approved start date
+        const start = new Date(r.approved_date);
+        const end: Date = r.return_date ? new Date(r.return_date) : start; // single day if no return
+        const startY: number = start.getUTCFullYear();
+        const startM: number = start.getUTCMonth();
+        const startD: number = start.getUTCDate();
+        const endY: number = end.getUTCFullYear();
+        const endM: number = end.getUTCMonth();
+        const endD: number = end.getUTCDate();
+        // Compare date-only range inclusive
+        const afterOrEqStart: boolean =
+          todayY > startY ||
+          (todayY === startY &&
+            (todayM > startM || (todayM === startM && todayD >= startD)));
+        const beforeOrEqEnd: boolean =
+          todayY < endY ||
+          (todayY === endY &&
+            (todayM < endM || (todayM === endM && todayD <= endD)));
+        if (afterOrEqStart && beforeOrEqEnd) return true;
+      }
+      return false;
+    } catch (e) {
+      this.logger.warn(
+        `hasLeaveForToday failed for worker ${workerId}: ${String(e)}`,
+      );
+      return false;
+    }
   }
 
   private async showManagerMenuIfActive(
@@ -444,7 +488,6 @@ export class ScenarioFrontendService implements OnModuleInit {
       const tr = T[lang];
       const tgId: number = Number(ctx.from?.id);
       const isWorker: boolean = ctx.match[0] === 'role_worker';
-
       if (isWorker) {
         // Prevent dual creation: if already manager, do not create worker
         const manager: ManagerEntity =
@@ -482,6 +525,16 @@ export class ScenarioFrontendService implements OnModuleInit {
       const worker: WorkerEntity = await this.workers.findByTelegramId(tg.id);
       if (!worker || !worker.is_verified)
         return ctx.answerCbQuery(T[lang].notVerified);
+      // Prevent check-in if worker has APPROVED leave for today
+      const hasLeaveToday: boolean = await this.hasLeaveForToday(worker.id);
+      if (hasLeaveToday) {
+        return ctx.answerCbQuery(
+          lang === language.RU
+            ? 'Сегодня утверждён отгул'
+            : 'Bugun javob tasdiqlangan',
+          { show_alert: true },
+        );
+      }
       try {
         await this.attendance.checkIn(worker.id);
       } catch (e: any) {
@@ -508,6 +561,16 @@ export class ScenarioFrontendService implements OnModuleInit {
       const worker: WorkerEntity = await this.workers.findByTelegramId(tg.id);
       if (!worker || !worker.is_verified)
         return ctx.answerCbQuery(T[lang].notVerified);
+      // Prevent check-out if on approved leave day (no attendance expected)
+      const hasLeaveToday: boolean = await this.hasLeaveForToday(worker.id);
+      if (hasLeaveToday) {
+        return ctx.answerCbQuery(
+          lang === language.RU
+            ? 'Сегодня утверждён отгул'
+            : 'Bugun javob tasdiqlangan',
+          { show_alert: true },
+        );
+      }
       try {
         await this.attendance.checkOut(worker.id);
       } catch (e: any) {
@@ -844,6 +907,29 @@ export class ScenarioFrontendService implements OnModuleInit {
           ? T[lang].greetingVerified(worker.fullname)
           : T[lang].greetingPending(worker.fullname)
         : T[lang].notFound;
+      // If worker has approved leave today, show disabled info instead of check-in/out buttons
+      if (worker && isVerified) {
+        const hasLeaveToday = await this.hasLeaveForToday(worker.id);
+        if (hasLeaveToday) {
+          const kb = Markup.inlineKeyboard([
+            [
+              Markup.button.callback(
+                lang === language.RU
+                  ? 'Сегодня утверждён отгул'
+                  : 'Bugun javob tasdiqlangan',
+                'noop',
+              ),
+            ],
+            [Markup.button.callback(T[lang].btnMyRequests, 'my_requests')],
+            [Markup.button.callback(T[lang].backBtn, 'back_to_menu')],
+          ]);
+          return this.replyFresh(
+            ctx,
+            `${text}\n\n${lang === language.RU ? 'Сегодня у вас утверждён отгул, посещаемость не требуется.' : 'Bugun sizning javobingiz tasdiqlangan, kelish-ketish belgilanmaydi.'}`,
+            kb,
+          );
+        }
+      }
       await this.replyFresh(ctx, text, this.mainMenu(isVerified, lang));
     });
     // Manager flows moved to ScenarioDashboardService
