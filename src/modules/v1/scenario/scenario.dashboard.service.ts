@@ -783,25 +783,30 @@ export class ScenarioDashboardService implements OnModuleInit {
       const buttons: any[] = [];
 
       // Get today's attendance and approved leave data for all workers
-      const workerIds = result.workers.map(w => w.id);
+      const workerIds = result.workers.map((w) => w.id);
       const attendanceMap = await this.attendance.getTodayForWorkers(workerIds);
-      const approvedLeaveMap = await this.requests.getApprovedLeaveForToday(workerIds);
+      const approvedLeaveMap =
+        await this.requests.getApprovedLeaveForToday(workerIds);
 
       // Worker buttons with enhanced attendance status
       for (const worker of result.workers) {
         const todayAttendance = attendanceMap.get(worker.id);
         const hasApprovedLeave = approvedLeaveMap.get(worker.id) || false;
-        
+
         let status: string;
         if (hasApprovedLeave) {
           // Worker has approved leave today
-          status = lang === language.RU ? '📋 Отгул одобрен' : '📋 Javob berilgan';
+          status =
+            lang === language.RU ? '📋 Отгул одобрен' : '📋 Javob berilgan';
         } else if (todayAttendance?.check_in) {
           // Worker checked in (prioritize over late comment)
           status = T[lang].attendancePresent;
         } else if (todayAttendance?.late_comment) {
           // Worker submitted late comment but hasn't checked in yet
-          status = lang === language.RU ? '⏰ Опоздал (не пришёл)' : '⏰ Kech qoldi (kelmagan)';
+          status =
+            lang === language.RU
+              ? '⏰ Опоздал (не пришёл)'
+              : '⏰ Kech qoldi (kelmagan)';
         } else {
           // Worker absent
           status = T[lang].attendanceAbsent;
