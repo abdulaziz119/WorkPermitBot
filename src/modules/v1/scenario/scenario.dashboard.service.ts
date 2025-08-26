@@ -186,6 +186,19 @@ export class ScenarioDashboardService implements OnModuleInit {
     }
   }
 
+  private statusLabel(lang: Lang, status: RequestsStatusEnum): string {
+    if (lang === language.RU) {
+      if (status === RequestsStatusEnum.PENDING) return `⏳ В ожидании`;
+      if (status === RequestsStatusEnum.APPROVED) return `✅ Одобрено`;
+      if (status === RequestsStatusEnum.REJECTED) return `❌ Отклонено`;
+      return status;
+    }
+    if (status === RequestsStatusEnum.PENDING) return `⏳ Kutilmoqda`;
+    if (status === RequestsStatusEnum.APPROVED) return `✅ Tasdiqlandi`;
+    if (status === RequestsStatusEnum.REJECTED) return `❌ Rad etildi`;
+    return status;
+  }
+
   private registerHandlers(): void {
     const bot = this.bot;
 
@@ -863,6 +876,12 @@ export class ScenarioDashboardService implements OnModuleInit {
             `mgr_export_worker_year_${workerId}`,
           ),
         ],
+        [
+          Markup.button.callback(
+            lang === language.RU ? 'Запросы 📋' : "So'rovlari 📋",
+            `mgr_worker_requests_${workerId}`,
+          ),
+        ],
         [Markup.button.callback(T[lang].backBtn, 'mgr_view_workers')],
       ];
 
@@ -968,6 +987,125 @@ export class ScenarioDashboardService implements OnModuleInit {
         }
       },
     );
+
+    // Worker requests with pagination
+    bot.action(/^mgr_worker_requests_(\d+)(?:_(\d+))?$/, async (ctx) => {
+      const workerId: number = Number(ctx.match[1]);
+      const page: number = ctx.match[2] ? Number(ctx.match[2]) : 1;
+      const tg = ctx.from;
+      const lang = await this.getLang(ctx);
+      const manager: ManagerEntity = await this.managers.findByTelegramId(
+        tg.id,
+      );
+      if (!manager || !manager.is_active)
+        return ctx.answerCbQuery(T[lang].noPermission);
+
+      const worker: WorkerEntity = await this.workers.findById(workerId);
+      if (!worker) return ctx.answerCbQuery(T[lang].notFound);
+
+      const allRequests: RequestEntity[] =
+        await this.requests.listByWorker(workerId);
+
+      if (!allRequests.length) {
+        const message = `👤 ${worker.fullname}\n\n${lang === language.RU ? 'У работника нет запросов' : "Ishchida so'rovlar yo'q"}`;
+        const buttons = [
+          [Markup.button.callback(T[lang].backBtn, `mgr_worker_${workerId}`)],
+        ];
+
+        try {
+          await ctx.editMessageText(message, Markup.inlineKeyboard(buttons));
+        } catch {
+          await ctx.reply(message, Markup.inlineKeyboard(buttons));
+        }
+        return;
+      }
+
+      const pageSize = 5;
+      const totalPages: number = Math.ceil(allRequests.length / pageSize);
+      const startIndex: number = (page - 1) * pageSize;
+      const endIndex: number = startIndex + pageSize;
+      const pageRequests: RequestEntity[] = allRequests.slice(
+        startIndex,
+        endIndex,
+      );
+
+      const lines: string = pageRequests
+        .map((r: RequestEntity): string => {
+          const statusText: string = this.statusLabel(lang, r.status);
+          const dateText: string = r.approved_date
+            ? ((): string => {
+                const d = new Date(r.approved_date);
+                const dd: string = String(d.getUTCDate()).padStart(2, '0');
+                const mm: string = String(d.getUTCMonth() + 1).padStart(2, '0');
+                const yyyy: number = d.getUTCFullYear();
+                return `📅 ${dd}.${mm}.${yyyy}`;
+              })()
+            : '';
+          const returnDateText: string = r.return_date
+            ? ((): string => {
+                const d = new Date(r.return_date);
+                const dd: string = String(d.getUTCDate()).padStart(2, '0');
+                const mm: string = String(d.getUTCMonth() + 1).padStart(2, '0');
+                const yyyy: number = d.getUTCFullYear();
+                return `🔄 ${dd}.${mm}.${yyyy}`;
+              })()
+            : '';
+          const reasonText = `📝 ${r.reason}`;
+          const commentText: string = r.manager_comment
+            ? `\n${lang === language.RU ? 'Комментарий' : 'Izoh'}: ${r.manager_comment}`
+            : '';
+
+          const parts: string[] = [`#${r.id} • ${statusText}`];
+          if (dateText) parts.push(dateText);
+          if (returnDateText) parts.push(returnDateText);
+          parts.push(reasonText);
+          if (commentText) parts.push(commentText.trim());
+
+          return parts.join('\n');
+        })
+        .join('\n\n');
+
+      // Build navigation buttons
+      const navButtons = [];
+      const pageInfo: string =
+        lang === language.RU
+          ? `Страница ${page} из ${totalPages}`
+          : `${page}-sahifa / ${totalPages}`;
+
+      if (page > 1) {
+        navButtons.push(
+          Markup.button.callback(
+            lang === language.RU ? '⬅️ Пред.' : '⬅️ Oldingi',
+            `mgr_worker_requests_${workerId}_${page - 1}`,
+          ),
+        );
+      }
+
+      if (page < totalPages) {
+        navButtons.push(
+          Markup.button.callback(
+            lang === language.RU ? 'След. ➡️' : 'Keyingi ➡️',
+            `mgr_worker_requests_${workerId}_${page + 1}`,
+          ),
+        );
+      }
+
+      const buttons = [];
+      if (navButtons.length > 0) {
+        buttons.push(navButtons);
+      }
+      buttons.push([
+        Markup.button.callback(T[lang].backBtn, `mgr_worker_${workerId}`),
+      ]);
+
+      const message = `👤 ${worker.fullname}\n${lang === language.RU ? 'Запросы' : "So'rovlari"}\n${pageInfo}\n\n${lines}`;
+
+      try {
+        await ctx.editMessageText(message, Markup.inlineKeyboard(buttons));
+      } catch {
+        await ctx.reply(message, Markup.inlineKeyboard(buttons));
+      }
+    });
 
     // Unverified managers (Super Admin only)
     bot.action('mgr_managers_pending', async (ctx) => {
