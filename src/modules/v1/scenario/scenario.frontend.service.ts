@@ -1432,8 +1432,12 @@ export class ScenarioFrontendService implements OnModuleInit {
         let status: string;
         
         if (todayAttendance?.check_in) {
-          status = lang === language.RU ? '✅ Пришёл' : '✅ Kelgan';
-        } else {
+          const checkInTime = formatUzbekistanTime(new Date(todayAttendance.check_in));
+          status = lang === language.RU ? `✅ Пришёл в ${checkInTime}` : `✅ ${checkInTime} da kelgan`;
+        } else if (todayAttendance?.late_comment) {
+            status = lang === language.RU ? '⏰ Опоздал' : '⏰ Kechikmoqda';
+        }
+        else {
           status = lang === language.RU ? '❌ Не пришёл' : '❌ Kelmagan';
         }
 
@@ -1501,9 +1505,13 @@ export class ScenarioFrontendService implements OnModuleInit {
       if (!worker) return ctx.answerCbQuery(T[lang].notFound);
 
       const todayAttendance: AttendanceEntity = await this.attendance.getToday(worker.id);
-      const status = todayAttendance?.check_in
-        ? (lang === language.RU ? '✅ Пришёл' : '✅ Kelgan')
-        : (lang === language.RU ? '❌ Не пришёл' : '❌ Kelmagan');
+      let status: string;
+      if (todayAttendance?.check_in) {
+        const checkInTime = formatUzbekistanTime(new Date(todayAttendance.check_in));
+        status = lang === language.RU ? `✅ Пришёл в ${checkInTime}` : `✅ ${checkInTime} da kelgan`;
+      } else {
+        status = lang === language.RU ? '❌ Не пришёл' : '❌ Kelmagan';
+      }
 
       const roleText = worker.role === WorkerRoleEnum.PROJECT_MANAGER 
         ? (lang === language.RU ? 'Проект-менеджер' : 'Loyiha menejeri')
@@ -1514,7 +1522,7 @@ export class ScenarioFrontendService implements OnModuleInit {
       // Show late comment if exists
       if (todayAttendance?.late_comment) {
         const commentTime = todayAttendance.comment_time
-          ? new Date(todayAttendance.comment_time).toLocaleTimeString()
+          ? formatUzbekistanTime(new Date(todayAttendance.comment_time))
           : '';
         message += `\n💬 ${lang === language.RU ? 'Причина опоздания' : 'Kech qolish sababi'}: ${todayAttendance.late_comment}`;
         if (commentTime) {
