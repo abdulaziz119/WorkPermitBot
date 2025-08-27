@@ -65,7 +65,7 @@ export function isAfterNoonInUzbekistan(date?: Date): boolean {
  * If the runtime is already in UTC+5 (getTimezoneOffset === -300) we return the date as-is.
  * Otherwise we shift from its real UTC value to UTC+5.
  */
-function convertToUzbekistan(date: Date): Date {
+export function convertToUzbekistan(date: Date): Date {
   const targetOffsetMinutes = -300; // UTC+5
   const currentOffsetMinutes = date.getTimezoneOffset();
   if (currentOffsetMinutes === targetOffsetMinutes) {
