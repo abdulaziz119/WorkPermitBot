@@ -1965,10 +1965,11 @@ export class ScenarioFrontendService implements OnModuleInit {
             manager.role === UserRoleEnum.SUPER_ADMIN,
         );
       } else if (request.request_type === RequestTypeEnum.HOURLY) {
-        // Soatlik javob - admin role managerlar
+        // Soatlik javob - admin VA super admin role managerlar
         targetManagers = managers.filter(
           (manager: ManagerEntity): boolean =>
-            manager.role === UserRoleEnum.ADMIN,
+            manager.role === UserRoleEnum.ADMIN ||
+            manager.role === UserRoleEnum.SUPER_ADMIN,
         );
       }
 

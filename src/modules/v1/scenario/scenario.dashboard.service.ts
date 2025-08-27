@@ -490,14 +490,27 @@ export class ScenarioDashboardService implements OnModuleInit {
       if (!manager || !manager.is_active)
         return ctx.answerCbQuery(T[lang].noPermission);
 
+      // Double-processing guard
+      const existing = await this.requests.findByIdWithWorker(requestId);
+      if (!existing) return ctx.answerCbQuery('Not found');
+      if (existing.status !== RequestsStatusEnum.PENDING) {
+        return ctx.answerCbQuery(
+          lang === language.RU
+            ? 'Уже обработано другим менеджером'
+            : 'Allaqachon boshqa manager tomonidan javob berilgan',
+        );
+      }
+
       const comment = ''; // Bo'sh izoh
 
       try {
         await ctx.editMessageReplyMarkup(undefined);
       } catch {}
 
+      let finalStatus: RequestsStatusEnum;
       if (action === 'approve') {
         await this.requests.approve(requestId, manager.id, comment);
+        finalStatus = RequestsStatusEnum.APPROVED;
         await ctx.reply(T[lang].approvedMsg(requestId));
         // Show manager menu navigation
         await this.showManagerMenuShortcut(ctx, lang, tg.id);
@@ -511,6 +524,7 @@ export class ScenarioDashboardService implements OnModuleInit {
         );
       } else {
         await this.requests.reject(requestId, manager.id, comment);
+        finalStatus = RequestsStatusEnum.REJECTED;
         await ctx.reply(T[lang].rejectedMsg(requestId));
         await this.showManagerMenuShortcut(ctx, lang, tg.id);
         // Worker ga xabar yuborish
@@ -521,6 +535,19 @@ export class ScenarioDashboardService implements OnModuleInit {
           comment,
           lang,
         );
+      }
+
+      // Notify other managers (admins + super admins) about decision
+      try {
+        const allManagers = await this.managers.listActive();
+        const others = allManagers.filter((m) => m.telegram_id !== manager.telegram_id && (m.role === UserRoleEnum.ADMIN || m.role === UserRoleEnum.SUPER_ADMIN));
+        const statusTextUz = finalStatus === RequestsStatusEnum.APPROVED ? 'Tasdiqlandi ✅' : 'Rad etildi ❌';
+        const statusTextRu = finalStatus === RequestsStatusEnum.APPROVED ? 'Одобрено ✅' : 'Отклонено ❌';
+        const actUz = `#${requestId} so'rov ${manager.fullname} tomonidan: ${statusTextUz}`;
+        const actRu = `Запрос #${requestId} обработан ${manager.fullname}: ${statusTextRu}`;
+        await Promise.all(others.map(o => this.bot.telegram.sendMessage(o.telegram_id, o.language === language.RU ? actRu : actUz).catch(()=>void 0)));
+      } catch (e) {
+        this.logger.warn('Broadcast decision failed ' + String(e));
       }
 
       ctx.session['approval_target'] = undefined;
@@ -537,6 +564,17 @@ export class ScenarioDashboardService implements OnModuleInit {
       );
       if (!manager || !manager.is_active)
         return ctx.answerCbQuery(T[lang].noPermission);
+
+      // Guard already processed
+      const existing = await this.requests.findByIdWithWorker(requestId);
+      if (!existing) return ctx.answerCbQuery('Not found');
+      if (existing.status !== RequestsStatusEnum.PENDING) {
+        return ctx.answerCbQuery(
+          lang === language.RU
+            ? 'Уже обработано другим менеджером'
+            : 'Allaqachon boshqa manager tomonidan javob berilgan',
+        );
+      }
 
       ctx.session ??= {};
       ctx.session['approval_target'] = { action, requestId };
@@ -561,8 +599,10 @@ export class ScenarioDashboardService implements OnModuleInit {
           return ctx.reply(T[lang].noPermission);
         }
         const comment: string = ctx.message.text.trim();
+        let finalStatus: RequestsStatusEnum;
         if (target.action === 'approve') {
           await this.requests.approve(target.requestId, manager.id, comment);
+          finalStatus = RequestsStatusEnum.APPROVED;
           await ctx.reply(T[lang].approvedMsg(target.requestId));
           await this.notifyWorkerDecision(
             target.requestId,
@@ -574,6 +614,7 @@ export class ScenarioDashboardService implements OnModuleInit {
           await this.showManagerMenuShortcut(ctx, lang, tg.id);
         } else {
           await this.requests.reject(target.requestId, manager.id, comment);
+          finalStatus = RequestsStatusEnum.REJECTED;
           await ctx.reply(T[lang].rejectedMsg(target.requestId));
           await this.notifyWorkerDecision(
             target.requestId,
@@ -583,6 +624,18 @@ export class ScenarioDashboardService implements OnModuleInit {
             lang,
           );
           await this.showManagerMenuShortcut(ctx, lang, tg.id);
+        }
+        // Broadcast decision
+        try {
+          const allManagers = await this.managers.listActive();
+          const others = allManagers.filter((m) => m.telegram_id !== manager.telegram_id && (m.role === UserRoleEnum.ADMIN || m.role === UserRoleEnum.SUPER_ADMIN));
+          const statusTextUz = finalStatus === RequestsStatusEnum.APPROVED ? 'Tasdiqlandi ✅' : 'Rad etildi ❌';
+          const statusTextRu = finalStatus === RequestsStatusEnum.APPROVED ? 'Одобрено ✅' : 'Отклонено ❌';
+            const actUz = `#${target.requestId} so'rov ${manager.fullname} tomonidan: ${statusTextUz}`;
+            const actRu = `Запрос #${target.requestId} обработан ${manager.fullname}: ${statusTextRu}`;
+            await Promise.all(others.map(o => this.bot.telegram.sendMessage(o.telegram_id, o.language === language.RU ? actRu : actUz).catch(()=>void 0)));
+        } catch (e) {
+          this.logger.warn('Broadcast decision failed ' + String(e));
         }
         ctx.session['approval_target'] = undefined;
         return; // handled
