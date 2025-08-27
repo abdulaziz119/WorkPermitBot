@@ -27,6 +27,7 @@ import {
   getCurrentHourInUzbekistan,
   formatUzbekistanTime,
   formatUzbekistanHourMinute,
+  formatRawHourMinute,
 } from '../../../utils/time/uzbekistan-time';
 
 type Ctx = Context & { session?: Record<string, any> };
@@ -1032,14 +1033,10 @@ export class ScenarioFrontendService implements OnModuleInit {
         let hourlyRequestType: HourlyRequestTypeEnum | undefined;
         if (flow.type === RequestTypeEnum.HOURLY) {
           if (flow.hourlyLeaveTime) {
-            // Parse Uzbekistan local time (YYYY-MM-DD HH:MM:SS) and convert to UTC (store as UTC)
+            // Store exactly as entered (treat entered local time as "raw" UTC to keep same numbers in DB)
             try {
-              const [datePart, timePart] = flow.hourlyLeaveTime.split(' ');
-              const [yy, mm, dd] = datePart.split('-').map(Number);
-              const [HH, MM, SS] = timePart.split(':').map(Number);
-              // Local Uzbekistan (UTC+5) -> UTC hour = HH - 5
-              const utcMs = Date.UTC(yy, mm - 1, dd, HH - 5, MM, SS || 0);
-              hourlyLeaveTime = new Date(utcMs);
+              const iso = flow.hourlyLeaveTime.replace(' ', 'T') + 'Z';
+              hourlyLeaveTime = new Date(iso); // e.g. 11:00 stays 11:00 (UTC)
             } catch (e) {
               this.logger.warn('Hourly time parse failed, fallback now');
               hourlyLeaveTime = getUzbekistanTime();
@@ -1647,8 +1644,9 @@ export class ScenarioFrontendService implements OnModuleInit {
         // For hourly requests show the target hour (hourly_leave_time). For daily show creation time.
         let requestTimeInfo: string;
         if (request.request_type === RequestTypeEnum.HOURLY && request.hourly_leave_time) {
-          const hm = formatUzbekistanHourMinute(request.hourly_leave_time);
-          requestTimeInfo = isRu ? `⏰ Время: ${hm}` : `⏰ Soat: ${hm}`;
+          // Show stored raw time (no +5) because we saved exact user input
+          const hm = formatRawHourMinute(request.hourly_leave_time);
+          requestTimeInfo = isRu ? `⏰ Вaqt: ${hm}` : `⏰ Soat: ${hm}`;
         } else {
           const requestTime = formatUzbekistanTime(request.created_at);
           requestTimeInfo = isRu
@@ -1672,12 +1670,11 @@ export class ScenarioFrontendService implements OnModuleInit {
                 : 'Erta ketish';
 
           if (request.hourly_leave_time) {
-            const leaveTime = formatUzbekistanHourMinute(
-              request.hourly_leave_time,
-            );
+            // Show the same raw hour already shown above (avoid different shifted time)
+            const leaveTime = formatRawHourMinute(request.hourly_leave_time);
             hourlyTypeInfo = isRu
-              ? `🕐 Тип: ${typeText} (${leaveTime})`
-              : `🕐 Turi: ${typeText} (${leaveTime})`;
+              ? `🕐 Тип: ${typeText}`
+              : `🕐 Turi: ${typeText}`;
           } else {
             hourlyTypeInfo = isRu
               ? `🕐 Тип: ${typeText}`

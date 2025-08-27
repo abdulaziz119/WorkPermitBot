@@ -51,6 +51,13 @@ export function formatUzbekistanHourMinute(date: Date): string {
   return `${hours}:${minutes}`;
 }
 
+// Raw hour:minute (no timezone adjustment) for values intentionally stored "as entered"
+export function formatRawHourMinute(date: Date): string {
+  const hours = String(date.getUTCHours()).padStart(2, '0');
+  const minutes = String(date.getUTCMinutes()).padStart(2, '0');
+  return `${hours}:${minutes}`;
+}
+
 /**
  * Check if a given time is after 12:00 PM in Uzbekistan timezone
  * @param date Optional date to check, defaults to current time
