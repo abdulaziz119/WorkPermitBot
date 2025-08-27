@@ -26,20 +26,22 @@ export function getCurrentHourInUzbekistan(): number {
  * @returns Formatted string in DD.MM.YYYY HH:MM format
  */
 export function formatUzbekistanTime(date: Date): string {
-  const uz = convertToUzbekistan(date);
-  const day = String(uz.getDate()).padStart(2, '0');
-  const month = String(uz.getMonth() + 1).padStart(2, '0');
-  const year = uz.getFullYear();
-  const hours = String(uz.getHours()).padStart(2, '0');
-  const minutes = String(uz.getMinutes()).padStart(2, '0');
+  // NOTE: DBga saqlangan vaqtlar allaqachon Uzbekistan lokalida (shift qilingan),
+  // shuning uchun qo'shimcha +5 soat siljitmaymiz, faqat formatlaymiz.
+  const d = date;
+  const day = String(d.getDate()).padStart(2, '0');
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const year = d.getFullYear();
+  const hours = String(d.getHours()).padStart(2, '0');
+  const minutes = String(d.getMinutes()).padStart(2, '0');
   return `${day}.${month}.${year} ${hours}:${minutes}`;
 }
 
 // Only HH:MM (Uzbekistan time)
 export function formatUzbekistanHourMinute(date: Date): string {
-  const uz = convertToUzbekistan(date);
-  const hours = String(uz.getHours()).padStart(2, '0');
-  const minutes = String(uz.getMinutes()).padStart(2, '0');
+  const d = date; // saqlangan lokal vaqt
+  const hours = String(d.getHours()).padStart(2, '0');
+  const minutes = String(d.getMinutes()).padStart(2, '0');
   return `${hours}:${minutes}`;
 }
 
