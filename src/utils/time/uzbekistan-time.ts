@@ -8,11 +8,8 @@
  * @returns Date object representing current time in Uzbekistan
  */
 export function getUzbekistanTime(): Date {
-  // Create a new Date in Uzbekistan timezone
-  const now = new Date();
-  const utc = now.getTime() + now.getTimezoneOffset() * 60000;
-  const uzbekistanTime = new Date(utc + 5 * 3600000); // UTC+5
-  return uzbekistanTime;
+  // Return current time normalized to Uzbekistan (UTC+5) without double shifting
+  return convertToUzbekistan(new Date());
 }
 
 /**
@@ -29,25 +26,20 @@ export function getCurrentHourInUzbekistan(): number {
  * @returns Formatted string in DD.MM.YYYY HH:MM format
  */
 export function formatUzbekistanTime(date: Date): string {
-  // Convert the given date to Uzbekistan timezone
-  const utc = date.getTime() + date.getTimezoneOffset() * 60000;
-  const uzbekTime = new Date(utc + 5 * 3600000); // UTC+5
-
-  const day = String(uzbekTime.getDate()).padStart(2, '0');
-  const month = String(uzbekTime.getMonth() + 1).padStart(2, '0');
-  const year = uzbekTime.getFullYear();
-  const hours = String(uzbekTime.getHours()).padStart(2, '0');
-  const minutes = String(uzbekTime.getMinutes()).padStart(2, '0');
-
+  const uz = convertToUzbekistan(date);
+  const day = String(uz.getDate()).padStart(2, '0');
+  const month = String(uz.getMonth() + 1).padStart(2, '0');
+  const year = uz.getFullYear();
+  const hours = String(uz.getHours()).padStart(2, '0');
+  const minutes = String(uz.getMinutes()).padStart(2, '0');
   return `${day}.${month}.${year} ${hours}:${minutes}`;
 }
 
 // Only HH:MM (Uzbekistan time)
 export function formatUzbekistanHourMinute(date: Date): string {
-  const utc = date.getTime() + date.getTimezoneOffset() * 60000;
-  const uzbekTime = new Date(utc + 5 * 3600000);
-  const hours = String(uzbekTime.getHours()).padStart(2, '0');
-  const minutes = String(uzbekTime.getMinutes()).padStart(2, '0');
+  const uz = convertToUzbekistan(date);
+  const hours = String(uz.getHours()).padStart(2, '0');
+  const minutes = String(uz.getMinutes()).padStart(2, '0');
   return `${hours}:${minutes}`;
 }
 
@@ -64,8 +56,21 @@ export function formatRawHourMinute(date: Date): string {
  * @returns true if the time is after 12:00 PM Uzbekistan time
  */
 export function isAfterNoonInUzbekistan(date?: Date): boolean {
-  const checkDate = date || new Date();
-  const utc = checkDate.getTime() + checkDate.getTimezoneOffset() * 60000;
-  const uzbekTime = new Date(utc + 5 * 3600000); // UTC+5
-  return uzbekTime.getHours() >= 12;
+  const uz = convertToUzbekistan(date || new Date());
+  return uz.getHours() >= 12;
+}
+
+/**
+ * Convert any Date to Uzbekistan local time representation (UTC+5) without double shifting
+ * If the runtime is already in UTC+5 (getTimezoneOffset === -300) we return the date as-is.
+ * Otherwise we shift from its real UTC value to UTC+5.
+ */
+function convertToUzbekistan(date: Date): Date {
+  const targetOffsetMinutes = -300; // UTC+5
+  const currentOffsetMinutes = date.getTimezoneOffset();
+  if (currentOffsetMinutes === targetOffsetMinutes) {
+    return date;
+  }
+  const utc = date.getTime() + currentOffsetMinutes * 60000; // normalize to UTC ms
+  return new Date(utc - targetOffsetMinutes * 60000); // apply target offset
 }
