@@ -29,25 +29,23 @@ export function getCurrentHourInUzbekistan(): number {
  * @returns Formatted string in DD.MM.YYYY HH:MM format
  */
 export function formatUzbekistanTime(date: Date): string {
-  // Convert the given date to Uzbekistan timezone
-  const utc = date.getTime() + date.getTimezoneOffset() * 60000;
-  const uzbekTime = new Date(utc + 5 * 3600000); // UTC+5
+  // Create a new Date object for UZT (UTC+5)
+  const uzbekTime = new Date(date.getTime() + 5 * 3600 * 1000);
 
-  const day = String(uzbekTime.getDate()).padStart(2, '0');
-  const month = String(uzbekTime.getMonth() + 1).padStart(2, '0');
-  const year = uzbekTime.getFullYear();
-  const hours = String(uzbekTime.getHours()).padStart(2, '0');
-  const minutes = String(uzbekTime.getMinutes()).padStart(2, '0');
+  const day = String(uzbekTime.getUTCDate()).padStart(2, '0');
+  const month = String(uzbekTime.getUTCMonth() + 1).padStart(2, '0');
+  const year = uzbekTime.getUTCFullYear();
+  const hours = String(uzbekTime.getUTCHours()).padStart(2, '0');
+  const minutes = String(uzbekTime.getUTCMinutes()).padStart(2, '0');
 
   return `${day}.${month}.${year} ${hours}:${minutes}`;
 }
 
 // Only HH:MM (Uzbekistan time)
 export function formatUzbekistanHourMinute(date: Date): string {
-  const utc = date.getTime() + date.getTimezoneOffset() * 60000;
-  const uzbekTime = new Date(utc + 5 * 3600000);
-  const hours = String(uzbekTime.getHours()).padStart(2, '0');
-  const minutes = String(uzbekTime.getMinutes()).padStart(2, '0');
+  const uzbekTime = new Date(date.getTime() + 5 * 3600 * 1000);
+  const hours = String(uzbekTime.getUTCHours()).padStart(2, '0');
+  const minutes = String(uzbekTime.getUTCMinutes()).padStart(2, '0');
   return `${hours}:${minutes}`;
 }
 
