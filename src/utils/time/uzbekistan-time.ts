@@ -10,8 +10,8 @@
 export function getUzbekistanTime(): Date {
   // Create a new Date in Uzbekistan timezone
   const now = new Date();
-  const utc = now.getTime() + (now.getTimezoneOffset() * 60000);
-  const uzbekistanTime = new Date(utc + (5 * 3600000)); // UTC+5
+  const utc = now.getTime() + now.getTimezoneOffset() * 60000;
+  const uzbekistanTime = new Date(utc + 5 * 3600000); // UTC+5
   return uzbekistanTime;
 }
 
@@ -30,8 +30,8 @@ export function getCurrentHourInUzbekistan(): number {
  */
 export function formatUzbekistanTime(date: Date): string {
   // Convert the given date to Uzbekistan timezone
-  const utc = date.getTime() + (date.getTimezoneOffset() * 60000);
-  const uzbekTime = new Date(utc + (5 * 3600000)); // UTC+5
+  const utc = date.getTime() + date.getTimezoneOffset() * 60000;
+  const uzbekTime = new Date(utc + 5 * 3600000); // UTC+5
 
   const day = String(uzbekTime.getDate()).padStart(2, '0');
   const month = String(uzbekTime.getMonth() + 1).padStart(2, '0');
@@ -42,6 +42,15 @@ export function formatUzbekistanTime(date: Date): string {
   return `${day}.${month}.${year} ${hours}:${minutes}`;
 }
 
+// Only HH:MM (Uzbekistan time)
+export function formatUzbekistanHourMinute(date: Date): string {
+  const utc = date.getTime() + date.getTimezoneOffset() * 60000;
+  const uzbekTime = new Date(utc + 5 * 3600000);
+  const hours = String(uzbekTime.getHours()).padStart(2, '0');
+  const minutes = String(uzbekTime.getMinutes()).padStart(2, '0');
+  return `${hours}:${minutes}`;
+}
+
 /**
  * Check if a given time is after 12:00 PM in Uzbekistan timezone
  * @param date Optional date to check, defaults to current time
@@ -49,7 +58,7 @@ export function formatUzbekistanTime(date: Date): string {
  */
 export function isAfterNoonInUzbekistan(date?: Date): boolean {
   const checkDate = date || new Date();
-  const utc = checkDate.getTime() + (checkDate.getTimezoneOffset() * 60000);
-  const uzbekTime = new Date(utc + (5 * 3600000)); // UTC+5
+  const utc = checkDate.getTime() + checkDate.getTimezoneOffset() * 60000;
+  const uzbekTime = new Date(utc + 5 * 3600000); // UTC+5
   return uzbekTime.getHours() >= 12;
 }

@@ -26,6 +26,7 @@ import {
   getUzbekistanTime,
   getCurrentHourInUzbekistan,
   formatUzbekistanTime,
+  formatUzbekistanHourMinute,
 } from '../../../utils/time/uzbekistan-time';
 
 type Ctx = Context & { session?: Record<string, any> };
@@ -1031,13 +1032,18 @@ export class ScenarioFrontendService implements OnModuleInit {
         let hourlyRequestType: HourlyRequestTypeEnum | undefined;
         if (flow.type === RequestTypeEnum.HOURLY) {
           if (flow.hourlyLeaveTime) {
-            // Convert the string to store exact time user entered
-            // flow.hourlyLeaveTime is in format: "2025-08-26 19:40:00"
-            const timeStr = flow.hourlyLeaveTime;
-            // Create date as if it's UTC to avoid timezone conversion
-            // This way 19:40 will be stored as 19:40, not converted to UTC
-            const isoTimeStr = timeStr.replace(' ', 'T') + 'Z';
-            hourlyLeaveTime = new Date(isoTimeStr);
+            // Parse Uzbekistan local time (YYYY-MM-DD HH:MM:SS) and convert to UTC (store as UTC)
+            try {
+              const [datePart, timePart] = flow.hourlyLeaveTime.split(' ');
+              const [yy, mm, dd] = datePart.split('-').map(Number);
+              const [HH, MM, SS] = timePart.split(':').map(Number);
+              // Local Uzbekistan (UTC+5) -> UTC hour = HH - 5
+              const utcMs = Date.UTC(yy, mm - 1, dd, HH - 5, MM, SS || 0);
+              hourlyLeaveTime = new Date(utcMs);
+            } catch (e) {
+              this.logger.warn('Hourly time parse failed, fallback now');
+              hourlyLeaveTime = getUzbekistanTime();
+            }
           } else {
             hourlyLeaveTime = getUzbekistanTime();
           }
@@ -1638,26 +1644,42 @@ export class ScenarioFrontendService implements OnModuleInit {
           }
         }
 
-        // Format request creation time for display
-        const requestTime = formatUzbekistanTime(request.created_at);
-        const requestTimeInfo = isRu 
-          ? `⏰ Время запроса: ${requestTime}`
-          : `⏰ So'rov vaqti: ${requestTime}`;
+        // For hourly requests show the target hour (hourly_leave_time). For daily show creation time.
+        let requestTimeInfo: string;
+        if (request.request_type === RequestTypeEnum.HOURLY && request.hourly_leave_time) {
+          const hm = formatUzbekistanHourMinute(request.hourly_leave_time);
+          requestTimeInfo = isRu ? `⏰ Время: ${hm}` : `⏰ Soat: ${hm}`;
+        } else {
+          const requestTime = formatUzbekistanTime(request.created_at);
+          requestTimeInfo = isRu
+            ? `⏰ Время запроса: ${requestTime}`
+            : `⏰ So'rov vaqti: ${requestTime}`;
+        }
 
         // Add hourly request type information
         let hourlyTypeInfo = '';
-        if (request.request_type === RequestTypeEnum.HOURLY && request.hourly_request_type) {
-          const typeText = request.hourly_request_type === HourlyRequestTypeEnum.COMING_LATE 
-            ? (isRu ? 'Опоздание' : 'Kechikish')
-            : (isRu ? 'Ранний уход' : 'Erta ketish');
-          
+        if (
+          request.request_type === RequestTypeEnum.HOURLY &&
+          request.hourly_request_type
+        ) {
+          const typeText =
+            request.hourly_request_type === HourlyRequestTypeEnum.COMING_LATE
+              ? isRu
+                ? 'Опоздание'
+                : 'Kechikish'
+              : isRu
+                ? 'Ранний уход'
+                : 'Erta ketish';
+
           if (request.hourly_leave_time) {
-            const leaveTime = formatUzbekistanTime(request.hourly_leave_time);
-            hourlyTypeInfo = isRu 
+            const leaveTime = formatUzbekistanHourMinute(
+              request.hourly_leave_time,
+            );
+            hourlyTypeInfo = isRu
               ? `🕐 Тип: ${typeText} (${leaveTime})`
               : `🕐 Turi: ${typeText} (${leaveTime})`;
           } else {
-            hourlyTypeInfo = isRu 
+            hourlyTypeInfo = isRu
               ? `🕐 Тип: ${typeText}`
               : `🕐 Turi: ${typeText}`;
           }
