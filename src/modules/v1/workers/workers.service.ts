@@ -2,6 +2,7 @@ import { Inject, Injectable, NotFoundException } from '@nestjs/common';
 import { Repository } from 'typeorm';
 import { MODELS } from '../../../constants/constants';
 import { WorkerEntity } from '../../../entity/workers.entity';
+import { WorkerRoleEnum } from '../../../utils/enum/user.enum';
 
 @Injectable()
 export class WorkersService {
@@ -96,5 +97,45 @@ export class WorkersService {
       hasNext: offset + limit < total,
       hasPrev: page > 1,
     };
+  }
+
+  // Role bilan bog'liq metodlar
+  async setWorkerRole(
+    workerId: number,
+    role: WorkerRoleEnum,
+  ): Promise<WorkerEntity | null> {
+    const worker: WorkerEntity = await this.findById(workerId);
+    if (!worker) return null;
+    worker.role = role;
+    return this.repo.save(worker);
+  }
+
+  async isProjectManager(telegramId: number): Promise<boolean> {
+    const worker: WorkerEntity = await this.findByTelegramId(telegramId);
+    return (
+      worker &&
+      worker.is_verified &&
+      worker.role === WorkerRoleEnum.PROJECT_MANAGER
+    );
+  }
+
+  async listProjectManagers(): Promise<WorkerEntity[]> {
+    return this.repo.find({
+      where: {
+        is_verified: true,
+        role: WorkerRoleEnum.PROJECT_MANAGER,
+      },
+      order: { created_at: 'ASC' },
+    });
+  }
+
+  async listWorkersByRole(role: WorkerRoleEnum): Promise<WorkerEntity[]> {
+    return this.repo.find({
+      where: {
+        is_verified: true,
+        role: role,
+      },
+      order: { created_at: 'ASC' },
+    });
   }
 }

@@ -3,6 +3,11 @@ export enum UserRoleEnum {
   ADMIN = 'admin',
 }
 
+export enum WorkerRoleEnum {
+  WORKER = 'worker',
+  PROJECT_MANAGER = 'project_manager',
+}
+
 export enum language {
   UZ = 'uz',
   EN = 'en',

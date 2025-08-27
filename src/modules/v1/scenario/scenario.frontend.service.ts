@@ -5,7 +5,7 @@ import { WorkersService } from '../workers/workers.service';
 import { ManagersService } from '../managers/managers.service';
 import { RequestsService } from '../requests/requests.service';
 import { AttendanceService } from '../attendance/attendance.service';
-import { UserRoleEnum, language } from '../../../utils/enum/user.enum';
+import { UserRoleEnum, language, WorkerRoleEnum } from '../../../utils/enum/user.enum';
 import {
   APP_TIMEZONE,
   REMINDER_CHECKIN_HH,
@@ -121,6 +121,8 @@ const T = {
     prevBtn: '⬅️ Oldingi',
     nextBtn: 'Keyingi ➡️',
     pageInfo: (current: number, total: number) => `Sahifa ${current}/${total}`,
+    attendancePresent: '✅ Kelgan',
+    attendanceAbsent: '❌ Kelmagan',
   },
   ru: {
     chooseLang: 'Выберите язык:',
@@ -208,6 +210,8 @@ const T = {
     nextBtn: 'Далее ➡️',
     pageInfo: (current: number, total: number) =>
       `Страница ${current}/${total}`,
+    attendancePresent: '✅ Пришёл',
+    attendanceAbsent: '❌ Не пришёл',
   },
 } as const;
 
@@ -252,7 +256,7 @@ export class ScenarioFrontendService implements OnModuleInit {
     return language.UZ;
   }
 
-  private mainMenu(isVerified: boolean, lang: Lang) {
+  private mainMenu(isVerified: boolean, lang: Lang, worker?: WorkerEntity) {
     const tr = T[lang];
     const buttons = [] as any[];
     if (isVerified) {
@@ -265,6 +269,13 @@ export class ScenarioFrontendService implements OnModuleInit {
       ]);
       buttons.push([Markup.button.callback(tr.btnMyRequests, 'my_requests')]);
       buttons.push([Markup.button.callback(tr.btnLateComment, 'late_comment')]);
+      
+      // Project Manager uchun qo'shimcha tugma
+      if (worker && worker.role === WorkerRoleEnum.PROJECT_MANAGER) {
+        buttons.push([
+          Markup.button.callback(tr.viewWorkersBtn, 'worker_view_workers'),
+        ]);
+      }
     } else {
       buttons.push([Markup.button.callback(tr.btnWaiting, 'noop')]);
     }
@@ -458,7 +469,7 @@ export class ScenarioFrontendService implements OnModuleInit {
             existingWorker.is_verified
               ? tr.greetingVerified(existingWorker.fullname)
               : tr.greetingPending(existingWorker.fullname),
-            this.mainMenu(!!existingWorker.is_verified, lang),
+            this.mainMenu(!!existingWorker.is_verified, lang, existingWorker),
           );
         } else if (existingManager) {
           // Show manager menu automatically if active
@@ -575,7 +586,7 @@ export class ScenarioFrontendService implements OnModuleInit {
       try {
         if ('message' in ctx.callbackQuery) await ctx.deleteMessage();
       } catch {}
-      await ctx.reply(T[lang].checkInDone, this.mainMenu(true, lang));
+      await ctx.reply(T[lang].checkInDone, this.mainMenu(true, lang, worker));
     });
 
     bot.action('check_out', async (ctx) => {
@@ -614,7 +625,7 @@ export class ScenarioFrontendService implements OnModuleInit {
       try {
         if ('message' in ctx.callbackQuery) await ctx.deleteMessage();
       } catch {}
-      await ctx.reply(T[lang].checkOutDone, this.mainMenu(true, lang));
+      await ctx.reply(T[lang].checkOutDone, this.mainMenu(true, lang, worker));
     });
 
     // Worker: create request (type selection)
@@ -759,7 +770,7 @@ export class ScenarioFrontendService implements OnModuleInit {
 
       await ctx.reply(
         T[lang].greetingVerified(worker.fullname),
-        this.mainMenu(true, lang),
+        this.mainMenu(true, lang, worker),
       );
     });
 
@@ -776,6 +787,52 @@ export class ScenarioFrontendService implements OnModuleInit {
       ctx.session ??= {};
       ctx.session['awaiting_late_comment'] = true;
       await ctx.reply(T[lang].enterLateComment, this.backKeyboard(lang));
+    });
+
+    // Worker: view workers (Project Manager only)
+    bot.action('worker_view_workers', async (ctx) => {
+      const tg = ctx.from;
+      const lang = await this.getLang(ctx);
+      const worker: WorkerEntity = await this.workers.findByTelegramId(tg.id);
+      
+      if (!worker || !worker.is_verified)
+        return ctx.answerCbQuery(T[lang].notVerified);
+      
+      if (worker.role !== WorkerRoleEnum.PROJECT_MANAGER) {
+        return ctx.answerCbQuery(
+          lang === language.RU 
+            ? 'У вас нет доступа к этой функции' 
+            : 'Sizda bu funksiyaga ruxsat yo\'q'
+        );
+      }
+
+      await this.showWorkersListForProjectManager(ctx, worker, lang);
+    });
+
+    // Worker pagination
+    bot.action(/^worker_view_workers_(\d+)$/, async (ctx) => {
+      const page = Number(ctx.match[1]);
+      const tg = ctx.from;
+      const lang = await this.getLang(ctx);
+      const worker: WorkerEntity = await this.workers.findByTelegramId(tg.id);
+      
+      if (!worker || !worker.is_verified || worker.role !== WorkerRoleEnum.PROJECT_MANAGER)
+        return ctx.answerCbQuery(T[lang].noPermission);
+
+      await this.showWorkersListForProjectManager(ctx, worker, lang, page);
+    });
+
+    // Worker detail view
+    bot.action(/^worker_detail_(\d+)$/, async (ctx) => {
+      const workerId = Number(ctx.match[1]);
+      const tg = ctx.from;
+      const lang = await this.getLang(ctx);
+      const projectManager: WorkerEntity = await this.workers.findByTelegramId(tg.id);
+      
+      if (!projectManager || !projectManager.is_verified || projectManager.role !== WorkerRoleEnum.PROJECT_MANAGER)
+        return ctx.answerCbQuery(T[lang].noPermission);
+
+      await this.showWorkerDetailForProjectManager(ctx, workerId, lang);
     });
 
     bot.on('text', async (ctx, next) => {
@@ -807,7 +864,7 @@ export class ScenarioFrontendService implements OnModuleInit {
             worker.is_verified
               ? T[lang].greetingVerified(worker.fullname)
               : T[lang].greetingPending(worker.fullname),
-            this.mainMenu(worker.is_verified, lang),
+            this.mainMenu(worker.is_verified, lang, worker),
           );
         } else {
           const manager: ManagerEntity = await this.managers.createIfNotExists(
@@ -1065,7 +1122,7 @@ export class ScenarioFrontendService implements OnModuleInit {
         ctx.session['req_flow'] = undefined;
         await ctx.reply(
           T[lang].requestAccepted(req.id),
-          this.mainMenu(true, lang),
+          this.mainMenu(true, lang, worker),
         );
         await this.notifyManagersNewRequest(req, worker, reason);
         return; // stop here
@@ -1090,7 +1147,7 @@ export class ScenarioFrontendService implements OnModuleInit {
         ctx.session['awaiting_reason'] = false;
         await ctx.reply(
           T[lang].requestAccepted(req.id),
-          this.mainMenu(true, lang),
+          this.mainMenu(true, lang, worker),
         );
         await this.notifyManagersNewRequest(req, worker, reason);
         return;
@@ -1118,7 +1175,7 @@ export class ScenarioFrontendService implements OnModuleInit {
         const result = await this.attendance.addLateComment(worker.id, comment);
         ctx.session['awaiting_late_comment'] = false;
 
-        await ctx.reply(T[lang].lateCommentAdded, this.mainMenu(true, lang));
+        await ctx.reply(T[lang].lateCommentAdded, this.mainMenu(true, lang, worker));
         return;
       }
       return next();
@@ -1330,8 +1387,152 @@ export class ScenarioFrontendService implements OnModuleInit {
           );
         }
       }
-      await this.replyFresh(ctx, text, this.mainMenu(isVerified, lang));
+      await this.replyFresh(ctx, text, this.mainMenu(isVerified, lang, worker));
     });
+
+    // Project Manager workers view handler
+    bot.action(/^worker_view_workers(?:_(\d+))?$/, async (ctx) => {
+      const tg = ctx.from;
+      const lang = await this.getLang(ctx);
+      const worker: WorkerEntity = await this.workers.findByTelegramId(tg.id);
+      
+      // Check if user is verified project manager
+      if (!worker || !worker.is_verified || worker.role !== WorkerRoleEnum.PROJECT_MANAGER) {
+        return ctx.answerCbQuery(
+          lang === language.RU 
+            ? 'У вас нет доступа' 
+            : 'Sizda ruxsat yo\'q'
+        );
+      }
+
+      const page: number = ctx.match[1] ? Number(ctx.match[1]) : 1;
+      const result = await this.workers.listVerifiedPaginated(page, 5);
+
+      if (result.workers.length === 0) {
+        return ctx.editMessageText(
+          lang === language.RU 
+            ? 'Нет подтверждённых работников' 
+            : 'Tasdiqlangan ishchilar yo\'q',
+          Markup.inlineKeyboard([
+            [Markup.button.callback(T[lang].backBtn, 'back_to_worker_menu')],
+          ]),
+        );
+      }
+
+      const message = `${T[lang].viewWorkersBtn} (${page}/${Math.ceil(result.total / 5)}):\n`;
+      const buttons: any[] = [];
+
+      // Get today's attendance for all workers
+      const workerIds = result.workers.map((w) => w.id);
+      const attendanceMap = await this.attendance.getTodayForWorkers(workerIds);
+
+      // Worker buttons with attendance status
+      for (const w of result.workers) {
+        const todayAttendance = attendanceMap.get(w.id);
+        let status: string;
+        
+        if (todayAttendance?.check_in) {
+          status = lang === language.RU ? '✅ Пришёл' : '✅ Kelgan';
+        } else {
+          status = lang === language.RU ? '❌ Не пришёл' : '❌ Kelmagan';
+        }
+
+        const roleIcon = w.role === WorkerRoleEnum.PROJECT_MANAGER ? '👨‍💼' : '👷';
+        
+        buttons.push([
+          Markup.button.callback(
+            `${status} ${roleIcon} ${w.fullname}`,
+            `worker_detail_${w.id}`,
+          ),
+        ]);
+      }
+
+      // Pagination buttons
+      const navButtons = [];
+      if (result.hasPrev) {
+        navButtons.push(
+          Markup.button.callback(
+            T[lang].prevBtn,
+            `worker_view_workers_${page - 1}`,
+          ),
+        );
+      }
+      if (result.hasNext) {
+        navButtons.push(
+          Markup.button.callback(
+            T[lang].nextBtn,
+            `worker_view_workers_${page + 1}`,
+          ),
+        );
+      }
+      if (navButtons.length > 0) {
+        buttons.push(navButtons);
+      }
+
+      // Back button
+      buttons.push([
+        Markup.button.callback(T[lang].backBtn, 'back_to_worker_menu'),
+      ]);
+
+      try {
+        await ctx.editMessageText(message, Markup.inlineKeyboard(buttons));
+      } catch {
+        await ctx.reply(message, Markup.inlineKeyboard(buttons));
+      }
+    });
+
+    // Project Manager worker detail view
+    bot.action(/^worker_detail_(\d+)$/, async (ctx) => {
+      const workerId: number = Number(ctx.match[1]);
+      const tg = ctx.from;
+      const lang = await this.getLang(ctx);
+      const currentWorker: WorkerEntity = await this.workers.findByTelegramId(tg.id);
+      
+      // Check if user is verified project manager
+      if (!currentWorker || !currentWorker.is_verified || currentWorker.role !== WorkerRoleEnum.PROJECT_MANAGER) {
+        return ctx.answerCbQuery(
+          lang === language.RU 
+            ? 'У вас нет доступа' 
+            : 'Sizda ruxsat yo\'q'
+        );
+      }
+
+      const worker: WorkerEntity = await this.workers.findById(workerId);
+      if (!worker) return ctx.answerCbQuery(T[lang].notFound);
+
+      const todayAttendance: AttendanceEntity = await this.attendance.getToday(worker.id);
+      const status = todayAttendance?.check_in
+        ? (lang === language.RU ? '✅ Пришёл' : '✅ Kelgan')
+        : (lang === language.RU ? '❌ Не пришёл' : '❌ Kelmagan');
+
+      const roleText = worker.role === WorkerRoleEnum.PROJECT_MANAGER 
+        ? (lang === language.RU ? 'Проект-менеджер' : 'Loyiha menejeri')
+        : (lang === language.RU ? 'Работник' : 'Ishchi');
+
+      let message = `👤 ${worker.fullname}\n📋 ${lang === language.RU ? 'Роль' : 'Rol'}: ${roleText}\n${lang === language.RU ? 'Сегодня' : 'Bugun'}: ${status}`;
+
+      // Show late comment if exists
+      if (todayAttendance?.late_comment) {
+        const commentTime = todayAttendance.comment_time
+          ? new Date(todayAttendance.comment_time).toLocaleTimeString()
+          : '';
+        message += `\n💬 ${lang === language.RU ? 'Причина опоздания' : 'Kech qolish sababi'}: ${todayAttendance.late_comment}`;
+        if (commentTime) {
+          message += ` (${commentTime})`;
+        }
+      }
+
+      const buttons = [
+        [Markup.button.callback(T[lang].backBtn, 'worker_view_workers')],
+      ];
+
+      try {
+        await ctx.editMessageText(message, Markup.inlineKeyboard(buttons));
+      } catch {
+        await ctx.reply(message, Markup.inlineKeyboard(buttons));
+      }
+    });
+
     // Manager flows moved to ScenarioDashboardService
   }
 
@@ -1377,14 +1578,22 @@ export class ScenarioFrontendService implements OnModuleInit {
         adminManagers.map(async (m): Promise<void> => {
           const text: string =
             m.language === language.RU
-              ? `Новый работник: ${worker.fullname} (tg:${worker.telegram_id}). Требуется подтверждение.`
-              : `Yangi ishchi: ${worker.fullname} (tg:${worker.telegram_id}). Tasdiqlash kerak.`;
+              ? `Новый работник: ${worker.fullname} (tg:${worker.telegram_id}). Выберите роль:`
+              : `Yangi ishchi: ${worker.fullname} (tg:${worker.telegram_id}). Rolni tanlang:`;
           const kb = Markup.inlineKeyboard([
             [
               Markup.button.callback(
-                m.language === 'ru' ? 'Подтвердить 👌' : 'Tasdiqlash 👌',
-                `approve_worker_${worker.id}`,
+                m.language === language.RU ? 'Работник 👷' : 'Ishchi 👷',
+                `approve_worker_worker_${worker.id}`,
               ),
+            ],
+            [
+              Markup.button.callback(
+                m.language === language.RU ? 'Проект-менеджер 👨‍�' : 'Loyiha menejeri 👨‍�',
+                `approve_worker_project_manager_${worker.id}`,
+              ),
+            ],
+            [
               Markup.button.callback(
                 m.language === language.RU ? 'Отклонить ❌' : 'Rad etish ❌',
                 `reject_worker_${worker.id}`,
@@ -1457,7 +1666,179 @@ export class ScenarioFrontendService implements OnModuleInit {
     }
   }
 
-  // --- Reminders ---
+  // Project Manager uchun ishchilar ro'yxatini ko'rsatish
+  private async showWorkersListForProjectManager(
+    ctx: Ctx,
+    projectManager: WorkerEntity,
+    lang: Lang,
+    page: number = 1,
+  ): Promise<void> {
+    try {
+      const result = await this.workers.listVerifiedPaginated(page, 5);
+
+      if (result.workers.length === 0) {
+        const message = lang === language.RU 
+          ? 'Нет подтверждённых работников' 
+          : 'Tasdiqlangan ishchilar yo\'q';
+        
+        await ctx.reply(message, Markup.inlineKeyboard([
+          [Markup.button.callback(T[lang].backBtn, 'back_to_worker_menu')]
+        ]));
+        return;
+      }
+
+      const tr = T[lang];
+      const message = `${tr.viewWorkersBtn} (${page}/${Math.ceil(result.total / 5)}):`;
+
+      const buttons: any[] = [];
+
+      // Get today's attendance and approved leave data for all workers
+      const workerIds = result.workers.map((w) => w.id);
+      const attendanceMap = await this.attendance.getTodayForWorkers(workerIds);
+      const approvedLeaveMap = await this.requests.getApprovedLeaveForToday(workerIds);
+
+      // Worker buttons with enhanced attendance status
+      for (const worker of result.workers) {
+        const todayAttendance = attendanceMap.get(worker.id);
+        const hasApprovedLeave = approvedLeaveMap.get(worker.id) || false;
+
+        let status: string;
+        if (hasApprovedLeave) {
+          // Worker has approved leave today
+          status = lang === language.RU ? '📋 Отгул одобрен' : '📋 Javob berilgan';
+        } else if (todayAttendance?.check_in) {
+          // Worker checked in (prioritize over late comment)
+          status = tr.attendancePresent;
+        } else if (todayAttendance?.late_comment) {
+          // Worker submitted late comment but hasn't checked in yet
+          status = lang === language.RU 
+            ? '⏰ Опоздал (не пришёл)' 
+            : '⏰ Kech qoldi (kelmagan)';
+        } else {
+          // Worker absent
+          status = tr.attendanceAbsent;
+        }
+
+        // Role indicator
+        const roleIcon = worker.role === WorkerRoleEnum.PROJECT_MANAGER ? '👨‍💼' : '👷';
+
+        buttons.push([
+          Markup.button.callback(
+            `${status} ${roleIcon} ${worker.fullname}`,
+            `worker_detail_${worker.id}`,
+          ),
+        ]);
+      }
+
+      // Pagination buttons
+      const navButtons = [];
+      if (result.hasPrev) {
+        navButtons.push(
+          Markup.button.callback(
+            tr.prevBtn,
+            `worker_view_workers_${page - 1}`,
+          ),
+        );
+      }
+      if (result.hasNext) {
+        navButtons.push(
+          Markup.button.callback(
+            tr.nextBtn,
+            `worker_view_workers_${page + 1}`,
+          ),
+        );
+      }
+      if (navButtons.length > 0) {
+        buttons.push(navButtons);
+      }
+
+      // Back button
+      buttons.push([
+        Markup.button.callback(tr.backBtn, 'back_to_worker_menu'),
+      ]);
+
+      await ctx.reply(message, Markup.inlineKeyboard(buttons));
+    } catch (e) {
+      this.logger.error('showWorkersListForProjectManager error', e);
+      await ctx.reply(
+        lang === language.RU ? 'Произошла ошибка' : 'Xatolik yuz berdi',
+        Markup.inlineKeyboard([
+          [Markup.button.callback(T[lang].backBtn, 'back_to_worker_menu')]
+        ])
+      );
+    }
+  }
+
+  // Project Manager uchun ishchi tafsilotlarini ko'rsatish
+  private async showWorkerDetailForProjectManager(
+    ctx: Ctx,
+    workerId: number,
+    lang: Lang,
+  ): Promise<void> {
+    try {
+      const worker: WorkerEntity = await this.workers.findById(workerId);
+      if (!worker) {
+        await ctx.reply(
+          lang === language.RU ? 'Работник не найден' : 'Ishchi topilmadi',
+          Markup.inlineKeyboard([
+            [Markup.button.callback(T[lang].backBtn, 'worker_view_workers')]
+          ])
+        );
+        return;
+      }
+
+      const todayAttendance: AttendanceEntity = await this.attendance.getToday(workerId);
+      const tr = T[lang];
+      
+      let status = todayAttendance?.check_in ? tr.attendancePresent : tr.attendanceAbsent;
+
+      // Role indicator
+      const roleText = worker.role === WorkerRoleEnum.PROJECT_MANAGER 
+        ? (lang === language.RU ? 'Проект Менеджер' : 'Project Manager')
+        : (lang === language.RU ? 'Работник' : 'Ishchi');
+
+      let message = `👤 ${worker.fullname}\n`;
+      message += `💼 ${roleText}\n`;
+      message += `📅 ${lang === language.RU ? 'Сегодня' : 'Bugun'}: ${status}`;
+
+      // Show check-in and check-out times if available
+      if (todayAttendance?.check_in) {
+        const checkInTime = formatUzbekistanTime(todayAttendance.check_in);
+        message += `\n⏰ ${lang === language.RU ? 'Пришёл' : 'Kelgan'}: ${checkInTime}`;
+      }
+
+      if (todayAttendance?.check_out) {
+        const checkOutTime = formatUzbekistanTime(todayAttendance.check_out);
+        message += `\n🚪 ${lang === language.RU ? 'Ушёл' : 'Ketgan'}: ${checkOutTime}`;
+      }
+
+      // Show late comment if exists
+      if (todayAttendance?.late_comment) {
+        const commentTime = todayAttendance.comment_time
+          ? formatUzbekistanTime(todayAttendance.comment_time)
+          : '';
+        message += `\n💬 ${lang === language.RU ? 'Причина опоздания' : 'Kech qolish sababi'}: ${todayAttendance.late_comment}`;
+        if (commentTime) {
+          message += ` (${commentTime})`;
+        }
+      }
+
+      const buttons = [
+        [Markup.button.callback(tr.backBtn, 'worker_view_workers')]
+      ];
+
+      await ctx.reply(message, Markup.inlineKeyboard(buttons));
+    } catch (e) {
+      this.logger.error('showWorkerDetailForProjectManager error', e);
+      await ctx.reply(
+        lang === language.RU ? 'Произошла ошибка' : 'Xatolik yuz berdi',
+        Markup.inlineKeyboard([
+          [Markup.button.callback(T[lang].backBtn, 'worker_view_workers')]
+        ])
+      );
+    }
+  }
+
   private startReminderLoop(): void {
     // Tick every 30 seconds
     setInterval(() => this.reminderTick().catch(() => void 0), 30_000);

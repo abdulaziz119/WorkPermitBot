@@ -7,7 +7,7 @@ import { WorkersService } from '../workers/workers.service';
 import { AttendanceService } from '../attendance/attendance.service';
 import { ScenarioNotificationService } from './scenario.notification.service';
 import { WorkersExcelService } from '../../../utils/workers.excel';
-import { language, UserRoleEnum } from '../../../utils/enum/user.enum';
+import { language, UserRoleEnum, WorkerRoleEnum } from '../../../utils/enum/user.enum';
 import { ManagerEntity } from '../../../entity/managers.entity';
 import { RequestEntity } from '../../../entity/requests.entity';
 import { WorkerEntity } from '../../../entity/workers.entity';
@@ -692,7 +692,8 @@ export class ScenarioDashboardService implements OnModuleInit {
     });
 
     // Approve/Reject inline from new worker notification
-    bot.action(/^approve_worker_(\d+)$/, async (ctx) => {
+    // Role-based worker approval handlers
+    bot.action(/^approve_worker_worker_(\d+)$/, async (ctx) => {
       const id: number = Number(ctx.match[1]);
       const tg = ctx.from;
       const lang = await this.getLang(ctx);
@@ -707,10 +708,20 @@ export class ScenarioDashboardService implements OnModuleInit {
 
       const verified: WorkerEntity = await this.workers.verifyWorker(id);
       if (!verified) return ctx.answerCbQuery(T[lang].notFound);
+      
+      // Worker role o'rnatish
+      await this.workers.setWorkerRole(id, WorkerRoleEnum.WORKER);
+      
       try {
         await ctx.editMessageReplyMarkup(undefined);
       } catch {}
-      await ctx.reply(T[lang].workerVerifiedMsg(verified.fullname));
+      await ctx.reply(
+        lang === language.RU
+          ? `${verified.fullname} "Работник" роли bilan tasdiqlandi 👷`
+          : `${verified.fullname} "Ishchi" roli bilan tasdiqlandi 👷`,
+      );
+      await this.showManagerMenuShortcut(ctx, lang, tg.id);
+      
       // Notify worker about approval
       try {
         const wLang: Lang =
@@ -747,8 +758,91 @@ export class ScenarioDashboardService implements OnModuleInit {
         await this.bot.telegram.sendMessage(
           verified.telegram_id,
           wLang === language.RU
-            ? 'Ваш профиль подтверждён менеджером ✅'
-            : 'Profilingiz menejer tomonidan tasdiqlandi ✅',
+            ? 'Ваш профиль подтверждён менеджером как "Работник" ✅'
+            : 'Profilingiz menejer tomonidan "Ishchi" roli bilan tasdiqlandi ✅',
+          { reply_markup: { inline_keyboard: buttons } as any },
+        );
+      } catch (e) {
+        this.logger.warn(
+          `Could not notify verified worker ${verified.id}: ${String(e)}`,
+        );
+      }
+    });
+
+    bot.action(/^approve_worker_project_manager_(\d+)$/, async (ctx) => {
+      const id: number = Number(ctx.match[1]);
+      const tg = ctx.from;
+      const lang = await this.getLang(ctx);
+      const manager: ManagerEntity = await this.managers.findByTelegramId(
+        tg.id,
+      );
+
+      // Faqat admin roli bilan managerlar tasdiqlashi mumkin
+      const isAdminManager: boolean = await this.managers.isAdmin(tg.id);
+      if (!manager || !manager.is_active || !isAdminManager)
+        return ctx.answerCbQuery(T[lang].noPermission);
+
+      const verified: WorkerEntity = await this.workers.verifyWorker(id);
+      if (!verified) return ctx.answerCbQuery(T[lang].notFound);
+      
+      // Project Manager role o'rnatish
+      await this.workers.setWorkerRole(id, WorkerRoleEnum.PROJECT_MANAGER);
+      
+      try {
+        await ctx.editMessageReplyMarkup(undefined);
+      } catch {}
+      await ctx.reply(
+        lang === language.RU
+          ? `${verified.fullname} "Проект-менеджер" роли bilan tasdiqlandi 👨‍💼`
+          : `${verified.fullname} "Loyiha menejeri" roli bilan tasdiqlandi 👨‍💼`,
+      );
+      await this.showManagerMenuShortcut(ctx, lang, tg.id);
+      
+      // Notify worker about approval with extended menu
+      try {
+        const wLang: Lang =
+          verified.language === language.RU ? language.RU : language.UZ;
+        const buttons: any[] = [];
+        buttons.push([
+          Markup.button.callback(
+            wLang === language.RU
+              ? 'Пришёл (Check-in) ✅'
+              : 'Kelish (Check-in) ✅',
+            'check_in',
+          ),
+        ]);
+        buttons.push([
+          Markup.button.callback(
+            wLang === language.RU
+              ? 'Ушёл (Check-out) 🕘'
+              : 'Ketish (Check-out) 🕘',
+            'check_out',
+          ),
+        ]);
+        buttons.push([
+          Markup.button.callback(
+            wLang === language.RU ? 'Запросить отгул 📝' : 'Javob soʼrash 📝',
+            'request_leave',
+          ),
+        ]);
+        buttons.push([
+          Markup.button.callback(
+            wLang === language.RU ? 'Мои запросы 📄' : 'Mening soʼrovlarim 📄',
+            'my_requests',
+          ),
+        ]);
+        // Project Manager uchun qo'shimcha tugma
+        buttons.push([
+          Markup.button.callback(
+            wLang === language.RU ? 'Просмотр работников 👥' : 'Ishchilarni koʼrish 👥',
+            'worker_view_workers',
+          ),
+        ]);
+        await this.bot.telegram.sendMessage(
+          verified.telegram_id,
+          wLang === language.RU
+            ? 'Ваш профиль подтверждён менеджером как "Проект-менеджер" ✅'
+            : 'Profilingiz menejer tomonidan "Loyiha menejeri" roli bilan tasdiqlandi ✅',
           { reply_markup: { inline_keyboard: buttons } as any },
         );
       } catch (e) {
@@ -877,9 +971,12 @@ export class ScenarioDashboardService implements OnModuleInit {
           status = T[lang].attendanceAbsent;
         }
 
+        // Role indicator
+        const roleIcon = worker.role === WorkerRoleEnum.PROJECT_MANAGER ? '👨‍💼' : '👷';
+
         buttons.push([
           Markup.button.callback(
-            `${status} ${worker.fullname}`,
+            `${status} ${roleIcon} ${worker.fullname}`,
             `mgr_worker_${worker.id}`,
           ),
         ]);
@@ -940,7 +1037,12 @@ export class ScenarioDashboardService implements OnModuleInit {
         ? T[lang].attendancePresent
         : T[lang].attendanceAbsent;
 
-      let message = `👤 ${worker.fullname}\n${T[lang].attendanceToday}: ${status}`;
+      // Role display
+      const roleText = worker.role === WorkerRoleEnum.PROJECT_MANAGER 
+        ? (lang === language.RU ? 'Проект Менеджер' : 'Project Manager')
+        : (lang === language.RU ? 'Работник' : 'Ishchi');
+
+      let message = `👤 ${worker.fullname}\n💼 ${roleText}\n${T[lang].attendanceToday}: ${status}`;
 
       // Show late comment if exists
       if (todayAttendance?.late_comment) {
@@ -982,6 +1084,14 @@ export class ScenarioDashboardService implements OnModuleInit {
             `mgr_worker_requests_${workerId}`,
           ),
         ],
+        [
+          Markup.button.callback(
+            worker.role === WorkerRoleEnum.PROJECT_MANAGER
+              ? (lang === language.RU ? 'Сделать работником 👷' : 'Ishchi qilish 👷')
+              : (lang === language.RU ? 'Сделать проект менеджером 👨‍💼' : 'Project Manager qilish 👨‍💼'),
+            `mgr_change_role_${workerId}`,
+          ),
+        ],
         [Markup.button.callback(T[lang].backBtn, 'mgr_view_workers')],
       ];
 
@@ -989,6 +1099,68 @@ export class ScenarioDashboardService implements OnModuleInit {
         await ctx.editMessageText(message, Markup.inlineKeyboard(buttons));
       } catch {
         await ctx.reply(message, Markup.inlineKeyboard(buttons));
+      }
+    });
+
+    // Worker role change handler
+    bot.action(/^mgr_change_role_(\d+)$/, async (ctx) => {
+      const workerId: number = Number(ctx.match[1]);
+      const tg = ctx.from;
+      const lang = await this.getLang(ctx);
+      const manager: ManagerEntity = await this.managers.findByTelegramId(tg.id);
+      
+      // Faqat admin va super admin role o'zgartirishga ruxsat berilgan
+      const canChangeRole = manager && manager.is_active && 
+        (manager.role === UserRoleEnum.ADMIN || manager.role === UserRoleEnum.SUPER_ADMIN);
+      
+      if (!canChangeRole) {
+        return ctx.answerCbQuery(
+          lang === language.RU 
+            ? 'У вас нет прав для изменения ролей'
+            : 'Sizda rol o\'zgartirish huquqi yo\'q'
+        );
+      }
+
+      const worker: WorkerEntity = await this.workers.findById(workerId);
+      if (!worker) return ctx.answerCbQuery(T[lang].notFound);
+
+      // Toggle role
+      const newRole = worker.role === WorkerRoleEnum.PROJECT_MANAGER 
+        ? WorkerRoleEnum.WORKER 
+        : WorkerRoleEnum.PROJECT_MANAGER;
+
+      const updatedWorker = await this.workers.setWorkerRole(workerId, newRole);
+      
+      if (updatedWorker) {
+        const roleText = newRole === WorkerRoleEnum.PROJECT_MANAGER 
+          ? (lang === language.RU ? 'Проект Менеджер' : 'Project Manager')
+          : (lang === language.RU ? 'Работник' : 'Ishchi');
+        
+        await ctx.answerCbQuery(
+          lang === language.RU 
+            ? `${worker.fullname} теперь ${roleText}` 
+            : `${worker.fullname} endi ${roleText}`,
+          { show_alert: true }
+        );
+
+        // Navigate back to workers list  
+        try {
+          await ctx.editMessageReplyMarkup(undefined);
+        } catch {}
+        
+        // Show success message and return to menu
+        await ctx.reply(
+          lang === language.RU 
+            ? '✅ Роль успешно изменена' 
+            : '✅ Rol muvaffaqiyatli o\'zgartirildi',
+          Markup.inlineKeyboard([
+            [Markup.button.callback(T[lang].viewWorkersBtn, 'mgr_view_workers')]
+          ])
+        );
+      } else {
+        await ctx.answerCbQuery(
+          lang === language.RU ? 'Ошибка при изменении роли' : 'Rol o\'zgartirishda xatolik'
+        );
       }
     });
 
