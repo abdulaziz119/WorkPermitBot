@@ -1,6 +1,7 @@
 import { Entity, Column, ManyToOne, JoinColumn } from 'typeorm';
-import { ManagerEntity } from './managers.entity';
-import { WorkerEntity } from './workers.entity';
+// import { ManagerEntity } from './managers.entity';
+// import { WorkerEntity } from './workers.entity';
+import { UserEntity } from './user.entity';
 import { BaseEntity, cascadeUpdateRelationOptions } from './base.entity';
 import { DB_SCHEMA } from '../utils/env/env';
 import {
@@ -15,12 +16,12 @@ export class RequestEntity extends BaseEntity {
   worker_id: number;
 
   @ManyToOne(
-    () => WorkerEntity,
+    () => UserEntity,
     (worker) => worker.requests,
     cascadeUpdateRelationOptions,
   )
   @JoinColumn({ name: 'worker_id' })
-  worker: WorkerEntity;
+  worker: UserEntity;
 
   @Column({ type: 'text' })
   reason: string;
@@ -58,11 +59,11 @@ export class RequestEntity extends BaseEntity {
   @Column({ type: 'integer', nullable: true })
   manager_id: number;
 
-  @ManyToOne(() => ManagerEntity, (manager) => manager.approved_requests, {
+  @ManyToOne(() => UserEntity, (manager) => manager.approved_requests, {
     nullable: true,
   })
   @JoinColumn({ name: 'manager_id' })
-  approved_by: ManagerEntity;
+  approved_by: UserEntity;
 
   @Column({ type: 'text', nullable: true })
   manager_comment: string | null; // Boshliq yozgan sabab

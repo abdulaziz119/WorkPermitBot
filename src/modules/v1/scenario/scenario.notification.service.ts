@@ -3,10 +3,10 @@ import { Cron } from '@nestjs/schedule';
 import { Telegraf } from 'telegraf';
 import { getBot } from './bot.instance';
 import { RequestsService } from '../requests/requests.service';
-import { ManagersService } from '../managers/managers.service';
+import { UsersService } from '../users/users.service';
 import { UserRoleEnum, language } from '../../../utils/enum/user.enum';
 import { RequestsStatusEnum } from '../../../utils/enum/requests.enum';
-import { ManagerEntity } from '../../../entity/managers.entity';
+import { UserEntity } from '../../../entity/user.entity';
 import { RequestEntity } from '../../../entity/requests.entity';
 
 type Lang = language.UZ | language.RU;
@@ -20,7 +20,8 @@ export class ScenarioNotificationService {
 
   constructor(
     private readonly requests: RequestsService,
-    private readonly managers: ManagersService,
+    // private readonly managers: ManagersService,
+    private readonly users: UsersService,
   ) {
     this.bot = getBot();
   }
@@ -55,7 +56,7 @@ export class ScenarioNotificationService {
     }
 
     // Super admin manager larni topish
-    const superAdminManagers: ManagerEntity[] = await this.managers.findByRole(
+    const superAdminManagers: UserEntity[] = await this.users.listByRole(
       UserRoleEnum.SUPER_ADMIN,
     );
 
@@ -196,8 +197,9 @@ export class ScenarioNotificationService {
         return `${daysThreshold} kundan ortiq eski javoblar topilmadi`;
       }
 
-      const superAdminManagers: ManagerEntity[] =
-        await this.managers.findByRole(UserRoleEnum.SUPER_ADMIN);
+      const superAdminManagers: UserEntity[] = await this.users.listByRole(
+        UserRoleEnum.SUPER_ADMIN,
+      );
 
       if (superAdminManagers.length === 0) {
         return 'Super admin manager lar topilmadi';

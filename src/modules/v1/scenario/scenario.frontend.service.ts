@@ -1,11 +1,12 @@
 import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { Telegraf, Markup, Context } from 'telegraf';
 import { ensureBotLaunched, getBot } from './bot.instance';
-import { WorkersService } from '../workers/workers.service';
-import { ManagersService } from '../managers/managers.service';
+// import { WorkersService } from '../workers/workers.service';
+// import { ManagersService } from '../managers/managers.service';
+import { UsersService } from '../users/users.service';
 import { RequestsService } from '../requests/requests.service';
 import { AttendanceService } from '../attendance/attendance.service';
-import { UserRoleEnum, language, WorkerRoleEnum } from '../../../utils/enum/user.enum';
+import { UserRoleEnum, language } from '../../../utils/enum/user.enum';
 import {
   APP_TIMEZONE,
   REMINDER_CHECKIN_HH,
@@ -13,8 +14,9 @@ import {
   REMINDER_CHECKOUT_HH,
   REMINDER_CHECKOUT_MM,
 } from '../../../utils/env/env';
-import { WorkerEntity } from '../../../entity/workers.entity';
-import { ManagerEntity } from '../../../entity/managers.entity';
+// import { UserEntity } from '../../../entity/workers.entity';
+// import { UserEntity } from '../../../entity/managers.entity';
+import { UserEntity } from '../../../entity/user.entity';
 import { RequestEntity } from '../../../entity/requests.entity';
 import { AttendanceEntity } from '../../../entity/attendance.entity';
 import {
@@ -226,8 +228,9 @@ export class ScenarioFrontendService implements OnModuleInit {
   };
 
   constructor(
-    private readonly workers: WorkersService,
-    private readonly managers: ManagersService,
+    // private readonly workers: WorkersService,
+    // private readonly managers: ManagersService,
+    private readonly users: UsersService,
     private readonly requests: RequestsService,
     private readonly attendance: AttendanceService,
   ) {
@@ -246,17 +249,14 @@ export class ScenarioFrontendService implements OnModuleInit {
     if (sessLang) return sessLang;
     const tgId: number = Number(ctx.from?.id);
     if (tgId) {
-      const w: WorkerEntity = await this.workers.findByTelegramId(tgId);
-      if (w?.language)
-        return w.language === language.RU ? language.RU : language.UZ;
-      const m: ManagerEntity = await this.managers.findByTelegramId(tgId);
-      if (m?.language)
-        return m.language === language.RU ? language.RU : language.UZ;
+      const user: UserEntity = await this.users.findByTelegramId(tgId);
+      if (user?.language)
+        return user.language === language.RU ? language.RU : language.UZ;
     }
     return language.UZ;
   }
 
-  private mainMenu(isVerified: boolean, lang: Lang, worker?: WorkerEntity) {
+  private mainMenu(isVerified: boolean, lang: Lang, worker?: UserEntity) {
     const tr = T[lang];
     const buttons = [] as any[];
     if (isVerified) {
@@ -269,9 +269,9 @@ export class ScenarioFrontendService implements OnModuleInit {
       ]);
       buttons.push([Markup.button.callback(tr.btnMyRequests, 'my_requests')]);
       buttons.push([Markup.button.callback(tr.btnLateComment, 'late_comment')]);
-      
+
       // Project Manager uchun qo'shimcha tugma
-      if (worker && worker.role === WorkerRoleEnum.PROJECT_MANAGER) {
+      if (worker && worker.role === UserRoleEnum.PROJECT_MANAGER) {
         buttons.push([
           Markup.button.callback(tr.viewWorkersBtn, 'worker_view_workers'),
         ]);
@@ -397,7 +397,7 @@ export class ScenarioFrontendService implements OnModuleInit {
     }
 
     const tr = T[lang];
-    const isSuperAdmin: boolean = await this.managers.isSuperAdmin(
+    const isSuperAdmin: boolean = await this.users.isSuperAdmin(
       manager.telegram_id,
     );
     const menuButtons: any[] = [];
@@ -455,25 +455,33 @@ export class ScenarioFrontendService implements OnModuleInit {
       ctx.session.tgId = tg.id;
 
       // If user already exists, skip language/role prompt
-      const existingWorker: WorkerEntity = await this.workers.findByTelegramId(
-        tg.id,
-      );
-      const existingManager: ManagerEntity =
-        await this.managers.findByTelegramId(tg.id);
-      if (existingWorker || existingManager) {
+      const existingUser: UserEntity = await this.users.findByTelegramId(tg.id);
+
+      if (existingUser) {
         const lang = await this.getLang(ctx);
         ctx.session.lang = lang;
-        if (existingWorker) {
+
+        // Check user role and show appropriate menu
+        if (
+          existingUser.role === UserRoleEnum.SUPER_ADMIN ||
+          existingUser.role === UserRoleEnum.ADMIN
+        ) {
+          // Manager/Admin roles - show manager menu if active
+          if (existingUser.is_active) {
+            await this.showManagerMenuIfActive(ctx, existingUser, lang);
+          } else {
+            const tr = T[lang];
+            await ctx.reply(tr.notActiveManager);
+          }
+        } else {
+          // Worker/Project Manager roles - show worker menu
           const tr = T[lang];
           await ctx.reply(
-            existingWorker.is_verified
-              ? tr.greetingVerified(existingWorker.fullname)
-              : tr.greetingPending(existingWorker.fullname),
-            this.mainMenu(!!existingWorker.is_verified, lang, existingWorker),
+            existingUser.is_verified
+              ? tr.greetingVerified(existingUser.fullname)
+              : tr.greetingPending(existingUser.fullname),
+            this.mainMenu(!!existingUser.is_verified, lang, existingUser),
           );
-        } else if (existingManager) {
-          // Show manager menu automatically if active
-          await this.showManagerMenuIfActive(ctx, existingManager, lang);
         }
         return;
       }
@@ -498,10 +506,10 @@ export class ScenarioFrontendService implements OnModuleInit {
 
       // Try update language if user already exists as worker/manager
       const tgId: number = Number(ctx.from?.id);
-      const w: WorkerEntity = await this.workers.findByTelegramId(tgId);
-      if (w) await this.workers.setLanguage(tgId, lang);
-      const m: ManagerEntity = await this.managers.findByTelegramId(tgId);
-      if (m) await this.managers.setLanguage(tgId, lang);
+      const w: UserEntity = await this.users.findByTelegramId(tgId);
+      if (w) await this.users.setLanguage(tgId, lang);
+      const m: UserEntity = await this.users.findByTelegramId(tgId);
+      if (m) await this.users.setLanguage(tgId, lang);
 
       // Ask role
       const kb = Markup.inlineKeyboard([
@@ -524,8 +532,7 @@ export class ScenarioFrontendService implements OnModuleInit {
       const isWorker: boolean = ctx.match[0] === 'role_worker';
       if (isWorker) {
         // Prevent dual creation: if already manager, do not create worker
-        const manager: ManagerEntity =
-          await this.managers.findByTelegramId(tgId);
+        const manager: UserEntity = await this.users.findByTelegramId(tgId);
         if (manager) {
           await ctx.editMessageText(tr.saved);
           return;
@@ -534,7 +541,7 @@ export class ScenarioFrontendService implements OnModuleInit {
         await ctx.editMessageText(tr.enterFullname);
       } else {
         // Prevent dual creation: if already worker, do not create manager
-        const worker: WorkerEntity = await this.workers.findByTelegramId(tgId);
+        const worker: UserEntity = await this.users.findByTelegramId(tgId);
         if (worker) {
           await ctx.editMessageText(tr.saved);
           return;
@@ -556,7 +563,7 @@ export class ScenarioFrontendService implements OnModuleInit {
     bot.action('check_in', async (ctx) => {
       const tg = ctx.from;
       const lang = await this.getLang(ctx);
-      const worker: WorkerEntity = await this.workers.findByTelegramId(tg.id);
+      const worker: UserEntity = await this.users.findByTelegramId(tg.id);
       if (!worker || !worker.is_verified)
         return ctx.answerCbQuery(T[lang].notVerified);
       // Prevent check-in if worker has APPROVED leave for today
@@ -592,7 +599,7 @@ export class ScenarioFrontendService implements OnModuleInit {
     bot.action('check_out', async (ctx) => {
       const tg = ctx.from;
       const lang = await this.getLang(ctx);
-      const worker: WorkerEntity = await this.workers.findByTelegramId(tg.id);
+      const worker: UserEntity = await this.users.findByTelegramId(tg.id);
       if (!worker || !worker.is_verified)
         return ctx.answerCbQuery(T[lang].notVerified);
       // Prevent check-out if on approved leave day (no attendance expected)
@@ -632,7 +639,7 @@ export class ScenarioFrontendService implements OnModuleInit {
     bot.action('request_leave', async (ctx) => {
       const tg = ctx.from;
       const lang = await this.getLang(ctx);
-      const worker: WorkerEntity = await this.workers.findByTelegramId(tg.id);
+      const worker: UserEntity = await this.users.findByTelegramId(tg.id);
       if (!worker || !worker.is_verified)
         return ctx.answerCbQuery(T[lang].notVerified);
 
@@ -653,7 +660,7 @@ export class ScenarioFrontendService implements OnModuleInit {
     bot.action('request_daily', async (ctx) => {
       const tg = ctx.from;
       const lang = await this.getLang(ctx);
-      const worker: WorkerEntity = await this.workers.findByTelegramId(tg.id);
+      const worker: UserEntity = await this.users.findByTelegramId(tg.id);
       if (!worker || !worker.is_verified)
         return ctx.answerCbQuery(T[lang].notVerified);
       ctx.session ??= {};
@@ -668,7 +675,7 @@ export class ScenarioFrontendService implements OnModuleInit {
     bot.action('request_hourly', async (ctx) => {
       const tg = ctx.from;
       const lang = await this.getLang(ctx);
-      const worker: WorkerEntity = await this.workers.findByTelegramId(tg.id);
+      const worker: UserEntity = await this.users.findByTelegramId(tg.id);
       if (!worker || !worker.is_verified)
         return ctx.answerCbQuery(T[lang].notVerified);
 
@@ -706,7 +713,7 @@ export class ScenarioFrontendService implements OnModuleInit {
     bot.action('hourly_coming_late', async (ctx) => {
       const tg = ctx.from;
       const lang = await this.getLang(ctx);
-      const worker: WorkerEntity = await this.workers.findByTelegramId(tg.id);
+      const worker: UserEntity = await this.users.findByTelegramId(tg.id);
       if (!worker || !worker.is_verified)
         return ctx.answerCbQuery(T[lang].notVerified);
 
@@ -732,7 +739,7 @@ export class ScenarioFrontendService implements OnModuleInit {
     bot.action('hourly_leaving_early', async (ctx) => {
       const tg = ctx.from;
       const lang = await this.getLang(ctx);
-      const worker: WorkerEntity = await this.workers.findByTelegramId(tg.id);
+      const worker: UserEntity = await this.users.findByTelegramId(tg.id);
       if (!worker || !worker.is_verified)
         return ctx.answerCbQuery(T[lang].notVerified);
 
@@ -758,7 +765,7 @@ export class ScenarioFrontendService implements OnModuleInit {
     bot.action('back_to_worker_menu', async (ctx) => {
       const tg = ctx.from;
       const lang = await this.getLang(ctx);
-      const worker: WorkerEntity = await this.workers.findByTelegramId(tg.id);
+      const worker: UserEntity = await this.users.findByTelegramId(tg.id);
       if (!worker || !worker.is_verified)
         return ctx.answerCbQuery(T[lang].notVerified);
 
@@ -778,7 +785,7 @@ export class ScenarioFrontendService implements OnModuleInit {
     bot.action('late_comment', async (ctx) => {
       const tg = ctx.from;
       const lang = await this.getLang(ctx);
-      const worker: WorkerEntity = await this.workers.findByTelegramId(tg.id);
+      const worker: UserEntity = await this.users.findByTelegramId(tg.id);
       if (!worker || !worker.is_verified)
         return ctx.answerCbQuery(T[lang].notVerified);
 
@@ -793,16 +800,16 @@ export class ScenarioFrontendService implements OnModuleInit {
     bot.action('worker_view_workers', async (ctx) => {
       const tg = ctx.from;
       const lang = await this.getLang(ctx);
-      const worker: WorkerEntity = await this.workers.findByTelegramId(tg.id);
-      
+      const worker: UserEntity = await this.users.findByTelegramId(tg.id);
+
       if (!worker || !worker.is_verified)
         return ctx.answerCbQuery(T[lang].notVerified);
-      
-      if (worker.role !== WorkerRoleEnum.PROJECT_MANAGER) {
+
+      if (worker.role !== UserRoleEnum.PROJECT_MANAGER) {
         return ctx.answerCbQuery(
-          lang === language.RU 
-            ? 'У вас нет доступа к этой функции' 
-            : 'Sizda bu funksiyaga ruxsat yo\'q'
+          lang === language.RU
+            ? 'У вас нет доступа к этой функции'
+            : "Sizda bu funksiyaga ruxsat yo'q",
         );
       }
 
@@ -814,9 +821,13 @@ export class ScenarioFrontendService implements OnModuleInit {
       const page = Number(ctx.match[1]);
       const tg = ctx.from;
       const lang = await this.getLang(ctx);
-      const worker: WorkerEntity = await this.workers.findByTelegramId(tg.id);
-      
-      if (!worker || !worker.is_verified || worker.role !== WorkerRoleEnum.PROJECT_MANAGER)
+      const worker: UserEntity = await this.users.findByTelegramId(tg.id);
+
+      if (
+        !worker ||
+        !worker.is_verified ||
+        worker.role !== UserRoleEnum.PROJECT_MANAGER
+      )
         return ctx.answerCbQuery(T[lang].noPermission);
 
       await this.showWorkersListForProjectManager(ctx, worker, lang, page);
@@ -827,9 +838,15 @@ export class ScenarioFrontendService implements OnModuleInit {
       const workerId = Number(ctx.match[1]);
       const tg = ctx.from;
       const lang = await this.getLang(ctx);
-      const projectManager: WorkerEntity = await this.workers.findByTelegramId(tg.id);
-      
-      if (!projectManager || !projectManager.is_verified || projectManager.role !== WorkerRoleEnum.PROJECT_MANAGER)
+      const projectManager: UserEntity = await this.users.findByTelegramId(
+        tg.id,
+      );
+
+      if (
+        !projectManager ||
+        !projectManager.is_verified ||
+        projectManager.role !== UserRoleEnum.PROJECT_MANAGER
+      )
         return ctx.answerCbQuery(T[lang].noPermission);
 
       await this.showWorkerDetailForProjectManager(ctx, workerId, lang);
@@ -847,10 +864,11 @@ export class ScenarioFrontendService implements OnModuleInit {
         const tgId: number = Number(ctx.from?.id);
         const role = ctx.session.pending_role as 'worker' | 'manager';
         if (role === 'worker') {
-          const worker: WorkerEntity = await this.workers.createOrGet(
+          const worker: UserEntity = await this.users.createOrUpdate(
             tgId,
             name,
             lang,
+            UserRoleEnum.WORKER,
           );
           await ctx.reply(T[lang].workerCreated);
           if (!worker.is_verified) {
@@ -867,10 +885,11 @@ export class ScenarioFrontendService implements OnModuleInit {
             this.mainMenu(worker.is_verified, lang, worker),
           );
         } else {
-          const manager: ManagerEntity = await this.managers.createIfNotExists(
+          const manager: UserEntity = await this.users.createOrUpdate(
             tgId,
             name,
             lang,
+            UserRoleEnum.ADMIN,
           );
           await ctx.reply(T[lang].managerCreated);
           // Notify super admins about new manager
@@ -975,7 +994,7 @@ export class ScenarioFrontendService implements OnModuleInit {
       // Handle hourly time input
       if (flow?.step === 'await_hourly_time') {
         const tg = ctx.from;
-        const worker: WorkerEntity = await this.workers.findByTelegramId(tg.id);
+        const worker: UserEntity = await this.users.findByTelegramId(tg.id);
         const lang = await this.getLang(ctx);
         if (!worker || !worker.is_verified) {
           ctx.session['req_flow'] = undefined;
@@ -1057,7 +1076,7 @@ export class ScenarioFrontendService implements OnModuleInit {
       }
       if (flow?.step === 'await_reason') {
         const tg = ctx.from;
-        const worker: WorkerEntity = await this.workers.findByTelegramId(tg.id);
+        const worker: UserEntity = await this.users.findByTelegramId(tg.id);
         const lang = await this.getLang(ctx);
         if (!worker || !worker.is_verified) {
           ctx.session['req_flow'] = undefined;
@@ -1130,7 +1149,7 @@ export class ScenarioFrontendService implements OnModuleInit {
       // Legacy single-step fallback
       if (ctx.session?.['awaiting_reason']) {
         const tg = ctx.from;
-        const worker: WorkerEntity = await this.workers.findByTelegramId(tg.id);
+        const worker: UserEntity = await this.users.findByTelegramId(tg.id);
         const lang = await this.getLang(ctx);
         if (!worker || !worker.is_verified) {
           ctx.session['awaiting_reason'] = false;
@@ -1155,7 +1174,7 @@ export class ScenarioFrontendService implements OnModuleInit {
       // Handle late comment text input
       if (ctx.session?.['awaiting_late_comment']) {
         const tg = ctx.from;
-        const worker: WorkerEntity = await this.workers.findByTelegramId(tg.id);
+        const worker: UserEntity = await this.users.findByTelegramId(tg.id);
         const lang = await this.getLang(ctx);
         if (!worker || !worker.is_verified) {
           ctx.session['awaiting_late_comment'] = false;
@@ -1175,7 +1194,10 @@ export class ScenarioFrontendService implements OnModuleInit {
         const result = await this.attendance.addLateComment(worker.id, comment);
         ctx.session['awaiting_late_comment'] = false;
 
-        await ctx.reply(T[lang].lateCommentAdded, this.mainMenu(true, lang, worker));
+        await ctx.reply(
+          T[lang].lateCommentAdded,
+          this.mainMenu(true, lang, worker),
+        );
         return;
       }
       return next();
@@ -1184,7 +1206,7 @@ export class ScenarioFrontendService implements OnModuleInit {
     // Worker: list my requests with pagination
     bot.action(/^my_requests(?:_(\d+))?$/, async (ctx) => {
       const tg = ctx.from;
-      const worker: WorkerEntity = await this.workers.findByTelegramId(tg.id);
+      const worker: UserEntity = await this.users.findByTelegramId(tg.id);
       const lang = await this.getLang(ctx);
       if (!worker) return ctx.answerCbQuery(T[lang].notFound);
 
@@ -1357,16 +1379,36 @@ export class ScenarioFrontendService implements OnModuleInit {
         ctx.session['step'] = undefined;
         ctx.session['pending_role'] = undefined;
       }
-      const worker: WorkerEntity = await this.workers.findByTelegramId(tgId);
-      const isVerified: boolean = !!worker?.is_verified;
-      const text: string = worker
-        ? isVerified
-          ? T[lang].greetingVerified(worker.fullname)
-          : T[lang].greetingPending(worker.fullname)
-        : T[lang].notFound;
+
+      const user: UserEntity = await this.users.findByTelegramId(tgId);
+
+      if (!user) {
+        return this.replyFresh(ctx, T[lang].notFound);
+      }
+
+      // Check user role and show appropriate menu
+      if (
+        user.role === UserRoleEnum.SUPER_ADMIN ||
+        user.role === UserRoleEnum.ADMIN
+      ) {
+        // Manager/Admin roles - redirect to manager menu
+        if (user.is_active) {
+          await this.showManagerMenuIfActive(ctx, user, lang);
+        } else {
+          await this.replyFresh(ctx, T[lang].notActiveManager);
+        }
+        return;
+      }
+
+      // Worker/Project Manager roles
+      const isVerified: boolean = !!user?.is_verified;
+      const text: string = isVerified
+        ? T[lang].greetingVerified(user.fullname)
+        : T[lang].greetingPending(user.fullname);
+
       // If worker has approved leave today, show disabled info instead of check-in/out buttons
-      if (worker && isVerified) {
-        const hasLeaveToday = await this.hasLeaveForToday(worker.id);
+      if (user && isVerified) {
+        const hasLeaveToday = await this.hasLeaveForToday(user.id);
         if (hasLeaveToday) {
           const kb = Markup.inlineKeyboard([
             [
@@ -1387,32 +1429,34 @@ export class ScenarioFrontendService implements OnModuleInit {
           );
         }
       }
-      await this.replyFresh(ctx, text, this.mainMenu(isVerified, lang, worker));
+      await this.replyFresh(ctx, text, this.mainMenu(isVerified, lang, user));
     });
 
     // Project Manager workers view handler
     bot.action(/^worker_view_workers(?:_(\d+))?$/, async (ctx) => {
       const tg = ctx.from;
       const lang = await this.getLang(ctx);
-      const worker: WorkerEntity = await this.workers.findByTelegramId(tg.id);
-      
+      const worker: UserEntity = await this.users.findByTelegramId(tg.id);
+
       // Check if user is verified project manager
-      if (!worker || !worker.is_verified || worker.role !== WorkerRoleEnum.PROJECT_MANAGER) {
+      if (
+        !worker ||
+        !worker.is_verified ||
+        worker.role !== UserRoleEnum.PROJECT_MANAGER
+      ) {
         return ctx.answerCbQuery(
-          lang === language.RU 
-            ? 'У вас нет доступа' 
-            : 'Sizda ruxsat yo\'q'
+          lang === language.RU ? 'У вас нет доступа' : "Sizda ruxsat yo'q",
         );
       }
 
       const page: number = ctx.match[1] ? Number(ctx.match[1]) : 1;
-      const result = await this.workers.listVerifiedPaginated(page, 5);
+      const result = await this.users.listVerifiedWorkersPaginated(page, 5);
 
       if (result.workers.length === 0) {
         return ctx.editMessageText(
-          lang === language.RU 
-            ? 'Нет подтверждённых работников' 
-            : 'Tasdiqlangan ishchilar yo\'q',
+          lang === language.RU
+            ? 'Нет подтверждённых работников'
+            : "Tasdiqlangan ishchilar yo'q",
           Markup.inlineKeyboard([
             [Markup.button.callback(T[lang].backBtn, 'back_to_worker_menu')],
           ]),
@@ -1430,19 +1474,23 @@ export class ScenarioFrontendService implements OnModuleInit {
       for (const w of result.workers) {
         const todayAttendance = attendanceMap.get(w.id);
         let status: string;
-        
+
         if (todayAttendance?.check_in) {
-          const checkInTime = formatUzbekistanTime(new Date(todayAttendance.check_in));
-          status = lang === language.RU ? `✅ Пришёл в ${checkInTime}` : `✅ ${checkInTime} da kelgan`;
+          const checkInTime = formatUzbekistanTime(
+            new Date(todayAttendance.check_in),
+          );
+          status =
+            lang === language.RU
+              ? `✅ Пришёл в ${checkInTime}`
+              : `✅ ${checkInTime} da kelgan`;
         } else if (todayAttendance?.late_comment) {
-            status = lang === language.RU ? '⏰ Опоздал' : '⏰ Kechikmoqda';
-        }
-        else {
+          status = lang === language.RU ? '⏰ Опоздал' : '⏰ Kechikmoqda';
+        } else {
           status = lang === language.RU ? '❌ Не пришёл' : '❌ Kelmagan';
         }
 
-        const roleIcon = w.role === WorkerRoleEnum.PROJECT_MANAGER ? '👨‍💼' : '👷';
-        
+        const roleIcon = w.role === UserRoleEnum.PROJECT_MANAGER ? '👨‍💼' : '👷';
+
         buttons.push([
           Markup.button.callback(
             `${status} ${roleIcon} ${w.fullname}`,
@@ -1490,32 +1538,48 @@ export class ScenarioFrontendService implements OnModuleInit {
       const workerId: number = Number(ctx.match[1]);
       const tg = ctx.from;
       const lang = await this.getLang(ctx);
-      const currentWorker: WorkerEntity = await this.workers.findByTelegramId(tg.id);
-      
+      const currentWorker: UserEntity = await this.users.findByTelegramId(
+        tg.id,
+      );
+
       // Check if user is verified project manager
-      if (!currentWorker || !currentWorker.is_verified || currentWorker.role !== WorkerRoleEnum.PROJECT_MANAGER) {
+      if (
+        !currentWorker ||
+        !currentWorker.is_verified ||
+        currentWorker.role !== UserRoleEnum.PROJECT_MANAGER
+      ) {
         return ctx.answerCbQuery(
-          lang === language.RU 
-            ? 'У вас нет доступа' 
-            : 'Sizda ruxsat yo\'q'
+          lang === language.RU ? 'У вас нет доступа' : "Sizda ruxsat yo'q",
         );
       }
 
-      const worker: WorkerEntity = await this.workers.findById(workerId);
+      const worker: UserEntity = await this.users.findById(workerId);
       if (!worker) return ctx.answerCbQuery(T[lang].notFound);
 
-      const todayAttendance: AttendanceEntity = await this.attendance.getToday(worker.id);
+      const todayAttendance: AttendanceEntity = await this.attendance.getToday(
+        worker.id,
+      );
       let status: string;
       if (todayAttendance?.check_in) {
-        const checkInTime = formatUzbekistanTime(new Date(todayAttendance.check_in));
-        status = lang === language.RU ? `✅ Пришёл в ${checkInTime}` : `✅ ${checkInTime} da kelgan`;
+        const checkInTime = formatUzbekistanTime(
+          new Date(todayAttendance.check_in),
+        );
+        status =
+          lang === language.RU
+            ? `✅ Пришёл в ${checkInTime}`
+            : `✅ ${checkInTime} da kelgan`;
       } else {
         status = lang === language.RU ? '❌ Не пришёл' : '❌ Kelmagan';
       }
 
-      const roleText = worker.role === WorkerRoleEnum.PROJECT_MANAGER 
-        ? (lang === language.RU ? 'Проект-менеджер' : 'Loyiha menejeri')
-        : (lang === language.RU ? 'Работник' : 'Ishchi');
+      const roleText =
+        worker.role === UserRoleEnum.PROJECT_MANAGER
+          ? lang === language.RU
+            ? 'Проект-менеджер'
+            : 'Loyiha menejeri'
+          : lang === language.RU
+            ? 'Работник'
+            : 'Ishchi';
 
       let message = `👤 ${worker.fullname}\n📋 ${lang === language.RU ? 'Роль' : 'Rol'}: ${roleText}\n${lang === language.RU ? 'Сегодня' : 'Bugun'}: ${status}`;
 
@@ -1546,9 +1610,11 @@ export class ScenarioFrontendService implements OnModuleInit {
 
   private async notifyManagersByLang(messageUz: string, messageRu: string) {
     try {
-      const managers: ManagerEntity[] = await this.managers.listActive();
+      const managers: UserEntity[] = await this.users.listByRole(
+        UserRoleEnum.ADMIN,
+      );
       await Promise.all(
-        managers.map((m: ManagerEntity) => {
+        managers.map((m: UserEntity) => {
           const msg: string =
             m.language === language.RU ? messageRu : messageUz;
           return this.bot.telegram
@@ -1569,12 +1635,14 @@ export class ScenarioFrontendService implements OnModuleInit {
     telegram_id: number;
   }): Promise<void> {
     try {
-      const managers: ManagerEntity[] = await this.managers.listActive();
+      const managers: UserEntity[] = await this.users.listByRole(
+        UserRoleEnum.ADMIN,
+      );
 
       // Faqat admin roli bilan managerlarni filter qilish
       const adminManagers = [];
       for (const manager of managers) {
-        const isAdminManager: boolean = await this.managers.isAdmin(
+        const isAdminManager: boolean = await this.users.isAdmin(
           manager.telegram_id,
         );
         if (isAdminManager) {
@@ -1597,7 +1665,9 @@ export class ScenarioFrontendService implements OnModuleInit {
             ],
             [
               Markup.button.callback(
-                m.language === language.RU ? 'Проект-менеджер 👨‍�' : 'Loyiha menejeri 👨‍�',
+                m.language === language.RU
+                  ? 'Проект-менеджер 👨‍�'
+                  : 'Loyiha menejeri 👨‍�',
                 `approve_worker_project_manager_${worker.id}`,
               ),
             ],
@@ -1628,10 +1698,11 @@ export class ScenarioFrontendService implements OnModuleInit {
     language: language;
   }): Promise<void> {
     try {
-      const superAdmins: ManagerEntity[] =
-        await this.managers.listSuperAdmins();
+      const superAdmins: UserEntity[] = await this.users.listByRole(
+        UserRoleEnum.SUPER_ADMIN,
+      );
       await Promise.all(
-        superAdmins.map(async (admin: ManagerEntity): Promise<void> => {
+        superAdmins.map(async (admin: UserEntity): Promise<void> => {
           const text: string =
             admin.language === language.RU
               ? `Новый менеджер: ${manager.fullname} (tg:${manager.telegram_id}). Выберите роль:`
@@ -1677,21 +1748,25 @@ export class ScenarioFrontendService implements OnModuleInit {
   // Project Manager uchun ishchilar ro'yxatini ko'rsatish
   private async showWorkersListForProjectManager(
     ctx: Ctx,
-    projectManager: WorkerEntity,
+    projectManager: UserEntity,
     lang: Lang,
     page: number = 1,
   ): Promise<void> {
     try {
-      const result = await this.workers.listVerifiedPaginated(page, 5);
+      const result = await this.users.listVerifiedWorkersPaginated(page, 5);
 
       if (result.workers.length === 0) {
-        const message = lang === language.RU 
-          ? 'Нет подтверждённых работников' 
-          : 'Tasdiqlangan ishchilar yo\'q';
-        
-        await ctx.reply(message, Markup.inlineKeyboard([
-          [Markup.button.callback(T[lang].backBtn, 'back_to_worker_menu')]
-        ]));
+        const message =
+          lang === language.RU
+            ? 'Нет подтверждённых работников'
+            : "Tasdiqlangan ishchilar yo'q";
+
+        await ctx.reply(
+          message,
+          Markup.inlineKeyboard([
+            [Markup.button.callback(T[lang].backBtn, 'back_to_worker_menu')],
+          ]),
+        );
         return;
       }
 
@@ -1703,7 +1778,8 @@ export class ScenarioFrontendService implements OnModuleInit {
       // Get today's attendance and approved leave data for all workers
       const workerIds = result.workers.map((w) => w.id);
       const attendanceMap = await this.attendance.getTodayForWorkers(workerIds);
-      const approvedLeaveMap = await this.requests.getApprovedLeaveForToday(workerIds);
+      const approvedLeaveMap =
+        await this.requests.getApprovedLeaveForToday(workerIds);
 
       // Worker buttons with enhanced attendance status
       for (const worker of result.workers) {
@@ -1713,22 +1789,25 @@ export class ScenarioFrontendService implements OnModuleInit {
         let status: string;
         if (hasApprovedLeave) {
           // Worker has approved leave today
-          status = lang === language.RU ? '📋 Отгул одобрен' : '📋 Javob berilgan';
+          status =
+            lang === language.RU ? '📋 Отгул одобрен' : '📋 Javob berilgan';
         } else if (todayAttendance?.check_in) {
           // Worker checked in (prioritize over late comment)
           status = tr.attendancePresent;
         } else if (todayAttendance?.late_comment) {
           // Worker submitted late comment but hasn't checked in yet
-          status = lang === language.RU 
-            ? '⏰ Опоздал (не пришёл)' 
-            : '⏰ Kech qoldi (kelmagan)';
+          status =
+            lang === language.RU
+              ? '⏰ Опоздал (не пришёл)'
+              : '⏰ Kech qoldi (kelmagan)';
         } else {
           // Worker absent
           status = tr.attendanceAbsent;
         }
 
         // Role indicator
-        const roleIcon = worker.role === WorkerRoleEnum.PROJECT_MANAGER ? '👨‍💼' : '👷';
+        const roleIcon =
+          worker.role === UserRoleEnum.PROJECT_MANAGER ? '👨‍💼' : '👷';
 
         buttons.push([
           Markup.button.callback(
@@ -1742,18 +1821,12 @@ export class ScenarioFrontendService implements OnModuleInit {
       const navButtons = [];
       if (result.hasPrev) {
         navButtons.push(
-          Markup.button.callback(
-            tr.prevBtn,
-            `worker_view_workers_${page - 1}`,
-          ),
+          Markup.button.callback(tr.prevBtn, `worker_view_workers_${page - 1}`),
         );
       }
       if (result.hasNext) {
         navButtons.push(
-          Markup.button.callback(
-            tr.nextBtn,
-            `worker_view_workers_${page + 1}`,
-          ),
+          Markup.button.callback(tr.nextBtn, `worker_view_workers_${page + 1}`),
         );
       }
       if (navButtons.length > 0) {
@@ -1761,9 +1834,7 @@ export class ScenarioFrontendService implements OnModuleInit {
       }
 
       // Back button
-      buttons.push([
-        Markup.button.callback(tr.backBtn, 'back_to_worker_menu'),
-      ]);
+      buttons.push([Markup.button.callback(tr.backBtn, 'back_to_worker_menu')]);
 
       await ctx.reply(message, Markup.inlineKeyboard(buttons));
     } catch (e) {
@@ -1771,8 +1842,8 @@ export class ScenarioFrontendService implements OnModuleInit {
       await ctx.reply(
         lang === language.RU ? 'Произошла ошибка' : 'Xatolik yuz berdi',
         Markup.inlineKeyboard([
-          [Markup.button.callback(T[lang].backBtn, 'back_to_worker_menu')]
-        ])
+          [Markup.button.callback(T[lang].backBtn, 'back_to_worker_menu')],
+        ]),
       );
     }
   }
@@ -1784,26 +1855,34 @@ export class ScenarioFrontendService implements OnModuleInit {
     lang: Lang,
   ): Promise<void> {
     try {
-      const worker: WorkerEntity = await this.workers.findById(workerId);
+      const worker: UserEntity = await this.users.findById(workerId);
       if (!worker) {
         await ctx.reply(
           lang === language.RU ? 'Работник не найден' : 'Ishchi topilmadi',
           Markup.inlineKeyboard([
-            [Markup.button.callback(T[lang].backBtn, 'worker_view_workers')]
-          ])
+            [Markup.button.callback(T[lang].backBtn, 'worker_view_workers')],
+          ]),
         );
         return;
       }
 
-      const todayAttendance: AttendanceEntity = await this.attendance.getToday(workerId);
+      const todayAttendance: AttendanceEntity =
+        await this.attendance.getToday(workerId);
       const tr = T[lang];
-      
-      let status = todayAttendance?.check_in ? tr.attendancePresent : tr.attendanceAbsent;
+
+      const status = todayAttendance?.check_in
+        ? tr.attendancePresent
+        : tr.attendanceAbsent;
 
       // Role indicator
-      const roleText = worker.role === WorkerRoleEnum.PROJECT_MANAGER 
-        ? (lang === language.RU ? 'Проект Менеджер' : 'Project Manager')
-        : (lang === language.RU ? 'Работник' : 'Ishchi');
+      const roleText =
+        worker.role === UserRoleEnum.PROJECT_MANAGER
+          ? lang === language.RU
+            ? 'Проект Менеджер'
+            : 'Project Manager'
+          : lang === language.RU
+            ? 'Работник'
+            : 'Ishchi';
 
       let message = `👤 ${worker.fullname}\n`;
       message += `💼 ${roleText}\n`;
@@ -1832,7 +1911,7 @@ export class ScenarioFrontendService implements OnModuleInit {
       }
 
       const buttons = [
-        [Markup.button.callback(tr.backBtn, 'worker_view_workers')]
+        [Markup.button.callback(tr.backBtn, 'worker_view_workers')],
       ];
 
       await ctx.reply(message, Markup.inlineKeyboard(buttons));
@@ -1841,8 +1920,8 @@ export class ScenarioFrontendService implements OnModuleInit {
       await ctx.reply(
         lang === language.RU ? 'Произошла ошибка' : 'Xatolik yuz berdi',
         Markup.inlineKeyboard([
-          [Markup.button.callback(T[lang].backBtn, 'worker_view_workers')]
-        ])
+          [Markup.button.callback(T[lang].backBtn, 'worker_view_workers')],
+        ]),
       );
     }
   }
@@ -1887,7 +1966,7 @@ export class ScenarioFrontendService implements OnModuleInit {
 
   private async sendCheckInReminders(): Promise<void> {
     try {
-      const workers: WorkerEntity[] = await this.workers.listVerified();
+      const workers: UserEntity[] = await this.users.listVerifiedWorkers();
       if (!workers.length) return;
       const workerIds: number[] = workers.map((w) => w.id);
       const todayMap = await this.attendance.getTodayForWorkers(workerIds);
@@ -1896,7 +1975,7 @@ export class ScenarioFrontendService implements OnModuleInit {
       );
 
       await Promise.all(
-        workers.map(async (w: WorkerEntity) => {
+        workers.map(async (w: UserEntity) => {
           if (this.reminderState.doneMorning.has(w.telegram_id)) return;
           const rec: AttendanceEntity = todayMap.get(w.id);
           // Skip if already checked in
@@ -1920,12 +1999,12 @@ export class ScenarioFrontendService implements OnModuleInit {
 
   private async sendCheckOutReminders(): Promise<void> {
     try {
-      const workers: WorkerEntity[] = await this.workers.listVerified();
+      const workers: UserEntity[] = await this.users.listVerifiedWorkers();
       if (!workers.length) return;
       const workerIds: number[] = workers.map((w) => w.id);
       const todayMap = await this.attendance.getTodayForWorkers(workerIds);
       await Promise.all(
-        workers.map(async (w: WorkerEntity) => {
+        workers.map(async (w: UserEntity) => {
           if (this.reminderState.doneEvening.has(w.telegram_id)) return;
           const rec: AttendanceEntity = todayMap.get(w.id);
           // Send only if has check_in but no check_out yet
@@ -1954,22 +2033,31 @@ export class ScenarioFrontendService implements OnModuleInit {
     reason: string,
   ): Promise<void> {
     try {
-      const managers: ManagerEntity[] = await this.managers.listActive();
+      // Barcha admin va super_admin rolidagi userlarni olish
+      const adminManagers: UserEntity[] = await this.users.listByRole(
+        UserRoleEnum.ADMIN,
+      );
+      const superAdminManagers: UserEntity[] = await this.users.listByRole(
+        UserRoleEnum.SUPER_ADMIN,
+      );
+      const allManagers: UserEntity[] = [...adminManagers, ...superAdminManagers];
 
-      let targetManagers: ManagerEntity[] = [];
+      let targetManagers: UserEntity[] = [];
 
       if (request.request_type === RequestTypeEnum.DAILY) {
-        // Kunlik javob - faqat super admin managerlar
-        targetManagers = managers.filter(
-          (manager: ManagerEntity): boolean =>
-            manager.role === UserRoleEnum.SUPER_ADMIN,
+        // Kunlik javob - faqat super admin managerlar (o'zidan boshqa)
+        targetManagers = allManagers.filter(
+          (manager: UserEntity): boolean =>
+            manager.role === UserRoleEnum.SUPER_ADMIN &&
+            manager.id !== worker.id,
         );
       } else if (request.request_type === RequestTypeEnum.HOURLY) {
-        // Soatlik javob - admin VA super admin role managerlar
-        targetManagers = managers.filter(
-          (manager: ManagerEntity): boolean =>
-            manager.role === UserRoleEnum.ADMIN ||
-            manager.role === UserRoleEnum.SUPER_ADMIN,
+        // Soatlik javob - admin VA super admin role managerlar (o'zidan boshqa)
+        targetManagers = allManagers.filter(
+          (manager: UserEntity): boolean =>
+            (manager.role === UserRoleEnum.ADMIN ||
+              manager.role === UserRoleEnum.SUPER_ADMIN) &&
+            manager.id !== worker.id,
         );
       }
 
@@ -2031,19 +2119,6 @@ export class ScenarioFrontendService implements OnModuleInit {
           }
         }
 
-        // For hourly requests show the target hour (hourly_leave_time). For daily show creation time.
-        let requestTimeInfo: string;
-        if (request.request_type === RequestTypeEnum.HOURLY && request.hourly_leave_time) {
-          // Show stored raw time (no +5) because we saved exact user input
-          const hm = formatRawHourMinute(request.hourly_leave_time);
-          requestTimeInfo = isRu ? `⏰ Вaqt: ${hm}` : `⏰ Soat: ${hm}`;
-        } else {
-          const requestTime = formatUzbekistanTime(request.created_at);
-          requestTimeInfo = isRu
-            ? `⏰ Время запроса: ${requestTime}`
-            : `⏰ So'rov vaqti: ${requestTime}`;
-        }
-
         // Add hourly request type information
         let hourlyTypeInfo = '';
         if (
@@ -2088,7 +2163,6 @@ export class ScenarioFrontendService implements OnModuleInit {
           workerLine,
           dateInfo,
           daysInfo,
-          requestTimeInfo,
           hourlyTypeInfo,
           reasonLine,
         ]

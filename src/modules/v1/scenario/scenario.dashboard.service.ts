@@ -1,16 +1,18 @@
 import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { Markup, Context, Telegraf } from 'telegraf';
 import { ensureBotLaunched, getBot } from './bot.instance';
-import { ManagersService } from '../managers/managers.service';
+// import { ManagersService } from '../managers/managers.service';
+// import { WorkersService } from '../workers/workers.service';
+import { UsersService } from '../users/users.service';
 import { RequestsService } from '../requests/requests.service';
-import { WorkersService } from '../workers/workers.service';
 import { AttendanceService } from '../attendance/attendance.service';
 import { ScenarioNotificationService } from './scenario.notification.service';
 import { WorkersExcelService } from '../../../utils/workers.excel';
-import { language, UserRoleEnum, WorkerRoleEnum } from '../../../utils/enum/user.enum';
-import { ManagerEntity } from '../../../entity/managers.entity';
+import { language, UserRoleEnum } from '../../../utils/enum/user.enum';
+// import { UserEntity } from '../../../entity/managers.entity';
+// import { UserEntity } from '../../../entity/workers.entity';
+import { UserEntity } from '../../../entity/user.entity';
 import { RequestEntity } from '../../../entity/requests.entity';
-import { WorkerEntity } from '../../../entity/workers.entity';
 import { AttendanceEntity } from '../../../entity/attendance.entity';
 import {
   RequestsStatusEnum,
@@ -112,9 +114,10 @@ export class ScenarioDashboardService implements OnModuleInit {
   private readonly bot: Telegraf<Ctx>;
 
   constructor(
-    private readonly managers: ManagersService,
+    // private readonly managers: ManagersService,
+    // private readonly workers: WorkersService,
+    private readonly users: UsersService,
     private readonly requests: RequestsService,
-    private readonly workers: WorkersService,
     private readonly attendance: AttendanceService,
     private readonly notificationService: ScenarioNotificationService,
     private readonly excel: WorkersExcelService,
@@ -132,7 +135,7 @@ export class ScenarioDashboardService implements OnModuleInit {
     if (sessLang) return sessLang === language.RU ? language.RU : language.UZ;
     const tgId: number = Number(ctx.from?.id);
     if (tgId) {
-      const m: ManagerEntity = await this.managers.findByTelegramId(tgId);
+      const m: UserEntity = await this.users.findByTelegramId(tgId);
       if (m?.language)
         return m.language === language.RU ? language.RU : language.UZ;
     }
@@ -177,8 +180,7 @@ export class ScenarioDashboardService implements OnModuleInit {
     telegramId: number,
   ): Promise<void> {
     try {
-      const isSuperAdmin: boolean =
-        await this.managers.isSuperAdmin(telegramId);
+      const isSuperAdmin: boolean = await this.users.isSuperAdmin(telegramId);
       const menu = isSuperAdmin
         ? this.superAdminMenu(lang)
         : this.managerMenu(lang);
@@ -207,17 +209,45 @@ export class ScenarioDashboardService implements OnModuleInit {
   private registerHandlers(): void {
     const bot = this.bot;
 
+    // Start command for managers/admins - show manager menu if user is admin/super_admin
+    bot.start(async (ctx) => {
+      const tg = ctx.from;
+      const lang = await this.getLang(ctx);
+      const user: UserEntity = await this.users.findByTelegramId(tg.id);
+
+      if (
+        user &&
+        (user.role === UserRoleEnum.ADMIN ||
+          user.role === UserRoleEnum.SUPER_ADMIN)
+      ) {
+        if (user.is_active) {
+          const isSuperAdmin: boolean = await this.users.isSuperAdmin(tg.id);
+          const menu = isSuperAdmin
+            ? this.superAdminMenu(lang)
+            : this.managerMenu(lang);
+          const title = isSuperAdmin
+            ? T[lang].superAdminMenuTitle
+            : T[lang].managerMenuTitle;
+
+          await ctx.reply(title, menu);
+          return;
+        } else {
+          await ctx.reply(T[lang].notActiveManager);
+          return;
+        }
+      }
+      // If not manager/admin, let frontend service handle it
+    });
+
     // Manager menu
     bot.command('manager', async (ctx) => {
       const tg = ctx.from;
       const lang = await this.getLang(ctx);
-      const manager: ManagerEntity = await this.managers.findByTelegramId(
-        tg.id,
-      );
+      const manager: UserEntity = await this.users.findByTelegramId(tg.id);
       if (!manager || !manager.is_active)
         return ctx.reply(T[lang].notActiveManager);
 
-      const isSuperAdmin: boolean = await this.managers.isSuperAdmin(tg.id);
+      const isSuperAdmin: boolean = await this.users.isSuperAdmin(tg.id);
       const menu = isSuperAdmin
         ? this.superAdminMenu(lang)
         : this.managerMenu(lang);
@@ -231,7 +261,7 @@ export class ScenarioDashboardService implements OnModuleInit {
     bot.command('superadmin', async (ctx) => {
       const tg = ctx.from;
       const lang = await this.getLang(ctx);
-      const isSuperAdmin: boolean = await this.managers.isSuperAdmin(tg.id);
+      const isSuperAdmin: boolean = await this.users.isSuperAdmin(tg.id);
       if (!isSuperAdmin) return ctx.reply(T[lang].notSuperAdmin);
       await ctx.reply(T[lang].superAdminMenuTitle, this.superAdminMenu(lang));
     });
@@ -240,7 +270,7 @@ export class ScenarioDashboardService implements OnModuleInit {
     bot.command('checkoldresponses', async (ctx) => {
       const tg = ctx.from;
       const lang = await this.getLang(ctx);
-      const isSuperAdmin: boolean = await this.managers.isSuperAdmin(tg.id);
+      const isSuperAdmin: boolean = await this.users.isSuperAdmin(tg.id);
       if (!isSuperAdmin) return ctx.reply(T[lang].notSuperAdmin);
 
       const result: string =
@@ -252,7 +282,7 @@ export class ScenarioDashboardService implements OnModuleInit {
     bot.command('check5days', async (ctx) => {
       const tg = ctx.from;
       const lang = await this.getLang(ctx);
-      const isSuperAdmin: boolean = await this.managers.isSuperAdmin(tg.id);
+      const isSuperAdmin: boolean = await this.users.isSuperAdmin(tg.id);
       if (!isSuperAdmin) return ctx.reply(T[lang].notSuperAdmin);
 
       const result: string =
@@ -264,7 +294,7 @@ export class ScenarioDashboardService implements OnModuleInit {
     bot.command('check1week', async (ctx) => {
       const tg = ctx.from;
       const lang = await this.getLang(ctx);
-      const isSuperAdmin: boolean = await this.managers.isSuperAdmin(tg.id);
+      const isSuperAdmin: boolean = await this.users.isSuperAdmin(tg.id);
       if (!isSuperAdmin) return ctx.reply(T[lang].notSuperAdmin);
 
       const result = await this.notificationService.manualCheckOldResponses(7);
@@ -274,7 +304,7 @@ export class ScenarioDashboardService implements OnModuleInit {
     bot.command('activate', async (ctx) => {
       const tg = ctx.from;
       const lang = await this.getLang(ctx);
-      const m: ManagerEntity = await this.managers.activate(tg.id);
+      const m: UserEntity = await this.users.activateUser(tg.id);
       if (!m) return ctx.reply(T[lang].activateNotFound);
       await ctx.reply(T[lang].activateOk);
     });
@@ -282,7 +312,7 @@ export class ScenarioDashboardService implements OnModuleInit {
     bot.command('deactivate', async (ctx) => {
       const tg = ctx.from;
       const lang = await this.getLang(ctx);
-      const m: ManagerEntity = await this.managers.deactivate(tg.id);
+      const m: UserEntity = await this.users.deactivateUser(tg.id);
       if (!m) return ctx.reply(T[lang].deactivateNotFound);
       await ctx.reply(T[lang].deactivateOk);
     });
@@ -291,9 +321,7 @@ export class ScenarioDashboardService implements OnModuleInit {
     bot.action('mgr_pending', async (ctx) => {
       const tg = ctx.from;
       const lang = await this.getLang(ctx);
-      const manager: ManagerEntity = await this.managers.findByTelegramId(
-        tg.id,
-      );
+      const manager: UserEntity = await this.users.findByTelegramId(tg.id);
       if (!manager || !manager.is_active)
         return ctx.answerCbQuery(T[lang].noPermission);
       try {
@@ -441,9 +469,7 @@ export class ScenarioDashboardService implements OnModuleInit {
       const requestId: number = Number(idStr);
       const tg = ctx.from;
       const lang = await this.getLang(ctx);
-      const manager: ManagerEntity = await this.managers.findByTelegramId(
-        tg.id,
-      );
+      const manager: UserEntity = await this.users.findByTelegramId(tg.id);
       if (!manager || !manager.is_active)
         return ctx.answerCbQuery(T[lang].noPermission);
 
@@ -484,9 +510,7 @@ export class ScenarioDashboardService implements OnModuleInit {
       const requestId: number = Number(idStr);
       const tg = ctx.from;
       const lang = await this.getLang(ctx);
-      const manager: ManagerEntity = await this.managers.findByTelegramId(
-        tg.id,
-      );
+      const manager: UserEntity = await this.users.findByTelegramId(tg.id);
       if (!manager || !manager.is_active)
         return ctx.answerCbQuery(T[lang].noPermission);
 
@@ -539,13 +563,35 @@ export class ScenarioDashboardService implements OnModuleInit {
 
       // Notify other managers (admins + super admins) about decision
       try {
-        const allManagers = await this.managers.listActive();
-        const others = allManagers.filter((m) => m.telegram_id !== manager.telegram_id && (m.role === UserRoleEnum.ADMIN || m.role === UserRoleEnum.SUPER_ADMIN));
-        const statusTextUz = finalStatus === RequestsStatusEnum.APPROVED ? 'Tasdiqlandi ✅' : 'Rad etildi ❌';
-        const statusTextRu = finalStatus === RequestsStatusEnum.APPROVED ? 'Одобрено ✅' : 'Отклонено ❌';
+        const adminManagers = await this.users.listByRole(UserRoleEnum.ADMIN);
+        const superAdminManagers = await this.users.listByRole(UserRoleEnum.SUPER_ADMIN);
+        const allManagers = [...adminManagers, ...superAdminManagers];
+        const others = allManagers.filter(
+          (m) =>
+            m.telegram_id !== manager.telegram_id &&
+            (m.role === UserRoleEnum.ADMIN ||
+              m.role === UserRoleEnum.SUPER_ADMIN),
+        );
+        const statusTextUz =
+          finalStatus === RequestsStatusEnum.APPROVED
+            ? 'Tasdiqlandi ✅'
+            : 'Rad etildi ❌';
+        const statusTextRu =
+          finalStatus === RequestsStatusEnum.APPROVED
+            ? 'Одобрено ✅'
+            : 'Отклонено ❌';
         const actUz = `#${requestId} so'rov ${manager.fullname} tomonidan: ${statusTextUz}`;
         const actRu = `Запрос #${requestId} обработан ${manager.fullname}: ${statusTextRu}`;
-        await Promise.all(others.map(o => this.bot.telegram.sendMessage(o.telegram_id, o.language === language.RU ? actRu : actUz).catch(()=>void 0)));
+        await Promise.all(
+          others.map((o) =>
+            this.bot.telegram
+              .sendMessage(
+                o.telegram_id,
+                o.language === language.RU ? actRu : actUz,
+              )
+              .catch(() => void 0),
+          ),
+        );
       } catch (e) {
         this.logger.warn('Broadcast decision failed ' + String(e));
       }
@@ -559,9 +605,7 @@ export class ScenarioDashboardService implements OnModuleInit {
       const requestId: number = Number(idStr);
       const tg = ctx.from;
       const lang = await this.getLang(ctx);
-      const manager: ManagerEntity = await this.managers.findByTelegramId(
-        tg.id,
-      );
+      const manager: UserEntity = await this.users.findByTelegramId(tg.id);
       if (!manager || !manager.is_active)
         return ctx.answerCbQuery(T[lang].noPermission);
 
@@ -591,9 +635,7 @@ export class ScenarioDashboardService implements OnModuleInit {
       if (target) {
         const tg = ctx.from;
         const lang = await this.getLang(ctx);
-        const manager: ManagerEntity = await this.managers.findByTelegramId(
-          tg.id,
-        );
+        const manager: UserEntity = await this.users.findByTelegramId(tg.id);
         if (!manager || !manager.is_active) {
           ctx.session['approval_target'] = undefined;
           return ctx.reply(T[lang].noPermission);
@@ -627,13 +669,35 @@ export class ScenarioDashboardService implements OnModuleInit {
         }
         // Broadcast decision
         try {
-          const allManagers = await this.managers.listActive();
-          const others = allManagers.filter((m) => m.telegram_id !== manager.telegram_id && (m.role === UserRoleEnum.ADMIN || m.role === UserRoleEnum.SUPER_ADMIN));
-          const statusTextUz = finalStatus === RequestsStatusEnum.APPROVED ? 'Tasdiqlandi ✅' : 'Rad etildi ❌';
-          const statusTextRu = finalStatus === RequestsStatusEnum.APPROVED ? 'Одобрено ✅' : 'Отклонено ❌';
-            const actUz = `#${target.requestId} so'rov ${manager.fullname} tomonidan: ${statusTextUz}`;
-            const actRu = `Запрос #${target.requestId} обработан ${manager.fullname}: ${statusTextRu}`;
-            await Promise.all(others.map(o => this.bot.telegram.sendMessage(o.telegram_id, o.language === language.RU ? actRu : actUz).catch(()=>void 0)));
+          const adminManagers = await this.users.listByRole(UserRoleEnum.ADMIN);
+          const superAdminManagers = await this.users.listByRole(UserRoleEnum.SUPER_ADMIN);
+          const allManagers = [...adminManagers, ...superAdminManagers];
+          const others = allManagers.filter(
+            (m) =>
+              m.telegram_id !== manager.telegram_id &&
+              (m.role === UserRoleEnum.ADMIN ||
+                m.role === UserRoleEnum.SUPER_ADMIN),
+          );
+          const statusTextUz =
+            finalStatus === RequestsStatusEnum.APPROVED
+              ? 'Tasdiqlandi ✅'
+              : 'Rad etildi ❌';
+          const statusTextRu =
+            finalStatus === RequestsStatusEnum.APPROVED
+              ? 'Одобрено ✅'
+              : 'Отклонено ❌';
+          const actUz = `#${target.requestId} so'rov ${manager.fullname} tomonidan: ${statusTextUz}`;
+          const actRu = `Запрос #${target.requestId} обработан ${manager.fullname}: ${statusTextRu}`;
+          await Promise.all(
+            others.map((o) =>
+              this.bot.telegram
+                .sendMessage(
+                  o.telegram_id,
+                  o.language === language.RU ? actRu : actUz,
+                )
+                .catch(() => void 0),
+            ),
+          );
         } catch (e) {
           this.logger.warn('Broadcast decision failed ' + String(e));
         }
@@ -647,15 +711,13 @@ export class ScenarioDashboardService implements OnModuleInit {
     bot.action('mgr_workers_pending', async (ctx) => {
       const tg = ctx.from;
       const lang = await this.getLang(ctx);
-      const manager: ManagerEntity = await this.managers.findByTelegramId(
-        tg.id,
-      );
+      const manager: UserEntity = await this.users.findByTelegramId(tg.id);
       if (!manager || !manager.is_active)
         return ctx.answerCbQuery(T[lang].noPermission);
       try {
         await ctx.editMessageReplyMarkup(undefined);
       } catch {}
-      const list: WorkerEntity[] = await this.workers.listUnverified(10);
+      const list: UserEntity[] = await this.users.listUnverifiedWorkers(10);
       if (!list.length)
         return ctx.editMessageText(
           T[lang].unverifiedWorkersEmpty,
@@ -688,12 +750,10 @@ export class ScenarioDashboardService implements OnModuleInit {
       const id: number = Number(ctx.match[1]);
       const tg = ctx.from;
       const lang = await this.getLang(ctx);
-      const manager: ManagerEntity = await this.managers.findByTelegramId(
-        tg.id,
-      );
+      const manager: UserEntity = await this.users.findByTelegramId(tg.id);
       if (!manager || !manager.is_active)
         return ctx.answerCbQuery(T[lang].noPermission);
-      const verified: WorkerEntity = await this.workers.verifyWorker(id);
+      const verified: UserEntity = await this.users.verifyUser(id);
       if (!verified) return ctx.answerCbQuery(T[lang].notFound);
       await ctx.reply(T[lang].workerVerifiedMsg(verified.fullname));
       // Notify worker about approval in their own language and show menu
@@ -750,21 +810,19 @@ export class ScenarioDashboardService implements OnModuleInit {
       const id: number = Number(ctx.match[1]);
       const tg = ctx.from;
       const lang = await this.getLang(ctx);
-      const manager: ManagerEntity = await this.managers.findByTelegramId(
-        tg.id,
-      );
+      const manager: UserEntity = await this.users.findByTelegramId(tg.id);
 
       // Faqat admin roli bilan managerlar tasdiqlashi mumkin
-      const isAdminManager: boolean = await this.managers.isAdmin(tg.id);
+      const isAdminManager: boolean = await this.users.isAdmin(tg.id);
       if (!manager || !manager.is_active || !isAdminManager)
         return ctx.answerCbQuery(T[lang].noPermission);
 
-      const verified: WorkerEntity = await this.workers.verifyWorker(id);
+      const verified: UserEntity = await this.users.verifyUser(id);
       if (!verified) return ctx.answerCbQuery(T[lang].notFound);
-      
+
       // Worker role o'rnatish
-      await this.workers.setWorkerRole(id, WorkerRoleEnum.WORKER);
-      
+      await this.users.setUserRole(id, UserRoleEnum.WORKER);
+
       try {
         await ctx.editMessageReplyMarkup(undefined);
       } catch {}
@@ -774,7 +832,7 @@ export class ScenarioDashboardService implements OnModuleInit {
           : `${verified.fullname} "Ishchi" roli bilan tasdiqlandi 👷`,
       );
       await this.showManagerMenuShortcut(ctx, lang, tg.id);
-      
+
       // Notify worker about approval
       try {
         const wLang: Lang =
@@ -826,21 +884,19 @@ export class ScenarioDashboardService implements OnModuleInit {
       const id: number = Number(ctx.match[1]);
       const tg = ctx.from;
       const lang = await this.getLang(ctx);
-      const manager: ManagerEntity = await this.managers.findByTelegramId(
-        tg.id,
-      );
+      const manager: UserEntity = await this.users.findByTelegramId(tg.id);
 
       // Faqat admin roli bilan managerlar tasdiqlashi mumkin
-      const isAdminManager: boolean = await this.managers.isAdmin(tg.id);
+      const isAdminManager: boolean = await this.users.isAdmin(tg.id);
       if (!manager || !manager.is_active || !isAdminManager)
         return ctx.answerCbQuery(T[lang].noPermission);
 
-      const verified: WorkerEntity = await this.workers.verifyWorker(id);
+      const verified: UserEntity = await this.users.verifyUser(id);
       if (!verified) return ctx.answerCbQuery(T[lang].notFound);
-      
+
       // Project Manager role o'rnatish
-      await this.workers.setWorkerRole(id, WorkerRoleEnum.PROJECT_MANAGER);
-      
+      await this.users.setUserRole(id, UserRoleEnum.PROJECT_MANAGER);
+
       try {
         await ctx.editMessageReplyMarkup(undefined);
       } catch {}
@@ -850,7 +906,7 @@ export class ScenarioDashboardService implements OnModuleInit {
           : `${verified.fullname} "Loyiha menejeri" roli bilan tasdiqlandi 👨‍💼`,
       );
       await this.showManagerMenuShortcut(ctx, lang, tg.id);
-      
+
       // Notify worker about approval with extended menu
       try {
         const wLang: Lang =
@@ -887,7 +943,9 @@ export class ScenarioDashboardService implements OnModuleInit {
         // Project Manager uchun qo'shimcha tugma
         buttons.push([
           Markup.button.callback(
-            wLang === language.RU ? 'Просмотр работников 👥' : 'Ishchilarni koʼrish 👥',
+            wLang === language.RU
+              ? 'Просмотр работников 👥'
+              : 'Ishchilarni koʼrish 👥',
             'worker_view_workers',
           ),
         ]);
@@ -909,12 +967,10 @@ export class ScenarioDashboardService implements OnModuleInit {
       const id: number = Number(ctx.match[1]);
       const tg = ctx.from;
       const lang = await this.getLang(ctx);
-      const manager: ManagerEntity = await this.managers.findByTelegramId(
-        tg.id,
-      );
+      const manager: UserEntity = await this.users.findByTelegramId(tg.id);
 
       // Faqat admin roli bilan managerlar rad etishi mumkin
-      const isAdminManager: boolean = await this.managers.isAdmin(tg.id);
+      const isAdminManager: boolean = await this.users.isAdmin(tg.id);
       if (!manager || !manager.is_active || !isAdminManager)
         return ctx.answerCbQuery(T[lang].noPermission);
 
@@ -928,7 +984,7 @@ export class ScenarioDashboardService implements OnModuleInit {
       );
       // Optionally notify the worker of rejection
       try {
-        const w: WorkerEntity = await this.workers.findById(id);
+        const w: UserEntity = await this.users.findById(id);
         if (w) {
           const wLang = (w.language as Lang) || 'uz';
           await this.bot.telegram.sendMessage(
@@ -949,13 +1005,11 @@ export class ScenarioDashboardService implements OnModuleInit {
     bot.action('mgr_back_to_menu', async (ctx) => {
       const tg = ctx.from;
       const lang = await this.getLang(ctx);
-      const manager: ManagerEntity = await this.managers.findByTelegramId(
-        tg.id,
-      );
+      const manager: UserEntity = await this.users.findByTelegramId(tg.id);
       if (!manager || !manager.is_active)
         return ctx.answerCbQuery(T[lang].noPermission);
 
-      const isSuperAdmin: boolean = await this.managers.isSuperAdmin(tg.id);
+      const isSuperAdmin: boolean = await this.users.isSuperAdmin(tg.id);
       const menu = isSuperAdmin
         ? this.superAdminMenu(lang)
         : this.managerMenu(lang);
@@ -974,14 +1028,12 @@ export class ScenarioDashboardService implements OnModuleInit {
     bot.action(/^mgr_view_workers(?:_(\d+))?$/, async (ctx) => {
       const tg = ctx.from;
       const lang = await this.getLang(ctx);
-      const manager: ManagerEntity = await this.managers.findByTelegramId(
-        tg.id,
-      );
+      const manager: UserEntity = await this.users.findByTelegramId(tg.id);
       if (!manager || !manager.is_active)
         return ctx.answerCbQuery(T[lang].noPermission);
 
       const page: number = ctx.match[1] ? Number(ctx.match[1]) : 1;
-      const result = await this.workers.listVerifiedPaginated(page, 5);
+      const result = await this.users.listVerifiedWorkersPaginated(page, 5);
 
       if (result.workers.length === 0) {
         return ctx.editMessageText(
@@ -1025,7 +1077,8 @@ export class ScenarioDashboardService implements OnModuleInit {
         }
 
         // Role indicator
-        const roleIcon = worker.role === WorkerRoleEnum.PROJECT_MANAGER ? '👨‍💼' : '👷';
+        const roleIcon =
+          worker.role === UserRoleEnum.PROJECT_MANAGER ? '👨‍💼' : '👷';
 
         buttons.push([
           Markup.button.callback(
@@ -1074,13 +1127,11 @@ export class ScenarioDashboardService implements OnModuleInit {
       const workerId: number = Number(ctx.match[1]);
       const tg = ctx.from;
       const lang = await this.getLang(ctx);
-      const manager: ManagerEntity = await this.managers.findByTelegramId(
-        tg.id,
-      );
+      const manager: UserEntity = await this.users.findByTelegramId(tg.id);
       if (!manager || !manager.is_active)
         return ctx.answerCbQuery(T[lang].noPermission);
 
-      const worker: WorkerEntity = await this.workers.findById(workerId);
+      const worker: UserEntity = await this.users.findById(workerId);
       if (!worker) return ctx.answerCbQuery(T[lang].notFound);
 
       const todayAttendance: AttendanceEntity = await this.attendance.getToday(
@@ -1091,9 +1142,14 @@ export class ScenarioDashboardService implements OnModuleInit {
         : T[lang].attendanceAbsent;
 
       // Role display
-      const roleText = worker.role === WorkerRoleEnum.PROJECT_MANAGER 
-        ? (lang === language.RU ? 'Проект Менеджер' : 'Project Manager')
-        : (lang === language.RU ? 'Работник' : 'Ishchi');
+      const roleText =
+        worker.role === UserRoleEnum.PROJECT_MANAGER
+          ? lang === language.RU
+            ? 'Проект Менеджер'
+            : 'Project Manager'
+          : lang === language.RU
+            ? 'Работник'
+            : 'Ishchi';
 
       let message = `👤 ${worker.fullname}\n💼 ${roleText}\n${T[lang].attendanceToday}: ${status}`;
 
@@ -1139,9 +1195,13 @@ export class ScenarioDashboardService implements OnModuleInit {
         ],
         [
           Markup.button.callback(
-            worker.role === WorkerRoleEnum.PROJECT_MANAGER
-              ? (lang === language.RU ? 'Сделать работником 👷' : 'Ishchi qilish 👷')
-              : (lang === language.RU ? 'Сделать проект менеджером 👨‍💼' : 'Project Manager qilish 👨‍💼'),
+            worker.role === UserRoleEnum.PROJECT_MANAGER
+              ? lang === language.RU
+                ? 'Сделать работником 👷'
+                : 'Ishchi qilish 👷'
+              : lang === language.RU
+                ? 'Сделать проект менеджером 👨‍💼'
+                : 'Project Manager qilish 👨‍💼',
             `mgr_change_role_${workerId}`,
           ),
         ],
@@ -1160,59 +1220,75 @@ export class ScenarioDashboardService implements OnModuleInit {
       const workerId: number = Number(ctx.match[1]);
       const tg = ctx.from;
       const lang = await this.getLang(ctx);
-      const manager: ManagerEntity = await this.managers.findByTelegramId(tg.id);
-      
+      const manager: UserEntity = await this.users.findByTelegramId(tg.id);
+
       // Faqat admin va super admin role o'zgartirishga ruxsat berilgan
-      const canChangeRole = manager && manager.is_active && 
-        (manager.role === UserRoleEnum.ADMIN || manager.role === UserRoleEnum.SUPER_ADMIN);
-      
+      const canChangeRole =
+        manager &&
+        manager.is_active &&
+        (manager.role === UserRoleEnum.ADMIN ||
+          manager.role === UserRoleEnum.SUPER_ADMIN);
+
       if (!canChangeRole) {
         return ctx.answerCbQuery(
-          lang === language.RU 
+          lang === language.RU
             ? 'У вас нет прав для изменения ролей'
-            : 'Sizda rol o\'zgartirish huquqi yo\'q'
+            : "Sizda rol o'zgartirish huquqi yo'q",
         );
       }
 
-      const worker: WorkerEntity = await this.workers.findById(workerId);
+      const worker: UserEntity = await this.users.findById(workerId);
       if (!worker) return ctx.answerCbQuery(T[lang].notFound);
 
       // Toggle role
-      const newRole = worker.role === WorkerRoleEnum.PROJECT_MANAGER 
-        ? WorkerRoleEnum.WORKER 
-        : WorkerRoleEnum.PROJECT_MANAGER;
+      const newRole =
+        worker.role === UserRoleEnum.PROJECT_MANAGER
+          ? UserRoleEnum.WORKER
+          : UserRoleEnum.PROJECT_MANAGER;
 
-      const updatedWorker = await this.workers.setWorkerRole(workerId, newRole);
-      
+      const updatedWorker = await this.users.setUserRole(workerId, newRole);
+
       if (updatedWorker) {
-        const roleText = newRole === WorkerRoleEnum.PROJECT_MANAGER 
-          ? (lang === language.RU ? 'Проект Менеджер' : 'Project Manager')
-          : (lang === language.RU ? 'Работник' : 'Ishchi');
-        
+        const roleText =
+          newRole === UserRoleEnum.PROJECT_MANAGER
+            ? lang === language.RU
+              ? 'Проект Менеджер'
+              : 'Project Manager'
+            : lang === language.RU
+              ? 'Работник'
+              : 'Ishchi';
+
         await ctx.answerCbQuery(
-          lang === language.RU 
-            ? `${worker.fullname} теперь ${roleText}` 
+          lang === language.RU
+            ? `${worker.fullname} теперь ${roleText}`
             : `${worker.fullname} endi ${roleText}`,
-          { show_alert: true }
+          { show_alert: true },
         );
 
-        // Navigate back to workers list  
+        // Navigate back to workers list
         try {
           await ctx.editMessageReplyMarkup(undefined);
         } catch {}
-        
+
         // Show success message and return to menu
         await ctx.reply(
-          lang === language.RU 
-            ? '✅ Роль успешно изменена' 
-            : '✅ Rol muvaffaqiyatli o\'zgartirildi',
+          lang === language.RU
+            ? '✅ Роль успешно изменена'
+            : "✅ Rol muvaffaqiyatli o'zgartirildi",
           Markup.inlineKeyboard([
-            [Markup.button.callback(T[lang].viewWorkersBtn, 'mgr_view_workers')]
-          ])
+            [
+              Markup.button.callback(
+                T[lang].viewWorkersBtn,
+                'mgr_view_workers',
+              ),
+            ],
+          ]),
         );
       } else {
         await ctx.answerCbQuery(
-          lang === language.RU ? 'Ошибка при изменении роли' : 'Rol o\'zgartirishda xatolik'
+          lang === language.RU
+            ? 'Ошибка при изменении роли'
+            : "Rol o'zgartirishda xatolik",
         );
       }
     });
@@ -1222,16 +1298,14 @@ export class ScenarioDashboardService implements OnModuleInit {
       const period = ctx.match[1] as 'day' | 'week' | 'month' | 'year';
       const tg = ctx.from;
       const lang = await this.getLang(ctx);
-      const manager: ManagerEntity = await this.managers.findByTelegramId(
-        tg.id,
-      );
+      const manager: UserEntity = await this.users.findByTelegramId(tg.id);
       if (!manager || !manager.is_active)
         return ctx.answerCbQuery(T[lang].noPermission);
 
       try {
         await ctx.answerCbQuery('📊 Excel fayl tayyorlanmoqda...');
 
-        const workers: WorkerEntity[] = await this.workers.listVerified();
+        const workers: UserEntity[] = await this.users.listVerifiedWorkers();
         const workerIds: number[] = workers.map((w) => w.id);
         const attendances: AttendanceEntity[] =
           await this.attendance.getAttendanceByPeriod(workerIds, period);
@@ -1268,16 +1342,14 @@ export class ScenarioDashboardService implements OnModuleInit {
         const workerId: number = Number(ctx.match[2]);
         const tg = ctx.from;
         const lang = await this.getLang(ctx);
-        const manager: ManagerEntity = await this.managers.findByTelegramId(
-          tg.id,
-        );
+        const manager: UserEntity = await this.users.findByTelegramId(tg.id);
         if (!manager || !manager.is_active)
           return ctx.answerCbQuery(T[lang].noPermission);
 
         try {
           await ctx.answerCbQuery('📊 Excel fayl tayyorlanmoqda...');
 
-          const worker: WorkerEntity = await this.workers.findById(workerId);
+          const worker: UserEntity = await this.users.findById(workerId);
           if (!worker) return ctx.answerCbQuery(T[lang].notFound);
 
           const attendances: AttendanceEntity[] =
@@ -1319,13 +1391,11 @@ export class ScenarioDashboardService implements OnModuleInit {
       const page: number = ctx.match[2] ? Number(ctx.match[2]) : 1;
       const tg = ctx.from;
       const lang = await this.getLang(ctx);
-      const manager: ManagerEntity = await this.managers.findByTelegramId(
-        tg.id,
-      );
+      const manager: UserEntity = await this.users.findByTelegramId(tg.id);
       if (!manager || !manager.is_active)
         return ctx.answerCbQuery(T[lang].noPermission);
 
-      const worker: WorkerEntity = await this.workers.findById(workerId);
+      const worker: UserEntity = await this.users.findById(workerId);
       if (!worker) return ctx.answerCbQuery(T[lang].notFound);
 
       const allRequests: RequestEntity[] =
@@ -1436,13 +1506,16 @@ export class ScenarioDashboardService implements OnModuleInit {
     bot.action('mgr_managers_pending', async (ctx) => {
       const tg = ctx.from;
       const lang = await this.getLang(ctx);
-      const isSuperAdmin: boolean = await this.managers.isSuperAdmin(tg.id);
+      const isSuperAdmin: boolean = await this.users.isSuperAdmin(tg.id);
       if (!isSuperAdmin) return ctx.answerCbQuery(T[lang].noPermission);
 
       try {
         await ctx.editMessageReplyMarkup(undefined);
       } catch {}
-      const list: ManagerEntity[] = await this.managers.listUnverified();
+      const list: UserEntity[] = await this.users.listByRole(
+        UserRoleEnum.ADMIN,
+        false,
+      );
       if (!list.length)
         return ctx.editMessageText(
           T[lang].unverifiedManagersEmpty,
@@ -1471,10 +1544,10 @@ export class ScenarioDashboardService implements OnModuleInit {
       const id: number = Number(ctx.match[1]);
       const tg = ctx.from;
       const lang = await this.getLang(ctx);
-      const isSuperAdmin: boolean = await this.managers.isSuperAdmin(tg.id);
+      const isSuperAdmin: boolean = await this.users.isSuperAdmin(tg.id);
       if (!isSuperAdmin) return ctx.answerCbQuery(T[lang].noPermission);
 
-      const verified: ManagerEntity = await this.managers.verifyManager(id);
+      const verified: UserEntity = await this.users.activateUser(id);
       if (!verified) return ctx.answerCbQuery(T[lang].notFound);
 
       await ctx.reply(T[lang].managerVerifiedMsg(verified.fullname));
@@ -1502,18 +1575,15 @@ export class ScenarioDashboardService implements OnModuleInit {
       const telegramId: number = Number(ctx.match[1]);
       const tg = ctx.from;
       const lang = await this.getLang(ctx);
-      const isSuperAdmin: boolean = await this.managers.isSuperAdmin(tg.id);
+      const isSuperAdmin: boolean = await this.users.isSuperAdmin(tg.id);
       if (!isSuperAdmin) return ctx.answerCbQuery(T[lang].noPermission);
 
-      const manager: ManagerEntity =
-        await this.managers.findByTelegramId(telegramId);
+      const manager: UserEntity = await this.users.findByTelegramId(telegramId);
       if (!manager) return ctx.answerCbQuery(T[lang].notFound);
 
       // Super Admin roli bilan tasdiqlash
-      const verified: ManagerEntity = await this.managers.verifyManagerWithRole(
-        manager.id,
-        UserRoleEnum.SUPER_ADMIN,
-      );
+      await this.users.setUserRole(manager.id, UserRoleEnum.SUPER_ADMIN);
+      const verified: UserEntity = await this.users.activateUser(manager.id);
       try {
         await ctx.editMessageReplyMarkup(undefined);
       } catch {}
@@ -1544,18 +1614,15 @@ export class ScenarioDashboardService implements OnModuleInit {
       const telegramId: number = Number(ctx.match[1]);
       const tg = ctx.from;
       const lang = await this.getLang(ctx);
-      const isSuperAdmin: boolean = await this.managers.isSuperAdmin(tg.id);
+      const isSuperAdmin: boolean = await this.users.isSuperAdmin(tg.id);
       if (!isSuperAdmin) return ctx.answerCbQuery(T[lang].noPermission);
 
-      const manager: ManagerEntity =
-        await this.managers.findByTelegramId(telegramId);
+      const manager: UserEntity = await this.users.findByTelegramId(telegramId);
       if (!manager) return ctx.answerCbQuery(T[lang].notFound);
 
       // Admin roli bilan tasdiqlash
-      const verified: ManagerEntity = await this.managers.verifyManagerWithRole(
-        manager.id,
-        UserRoleEnum.ADMIN,
-      );
+      await this.users.setUserRole(manager.id, UserRoleEnum.ADMIN);
+      const verified: UserEntity = await this.users.activateUser(manager.id);
       try {
         await ctx.editMessageReplyMarkup(undefined);
       } catch {}
@@ -1586,7 +1653,7 @@ export class ScenarioDashboardService implements OnModuleInit {
       const telegramId: number = Number(ctx.match[1]);
       const tg = ctx.from;
       const lang = await this.getLang(ctx);
-      const isSuperAdmin: boolean = await this.managers.isSuperAdmin(tg.id);
+      const isSuperAdmin: boolean = await this.users.isSuperAdmin(tg.id);
       if (!isSuperAdmin) return ctx.answerCbQuery(T[lang].noPermission);
 
       try {
@@ -1600,8 +1667,8 @@ export class ScenarioDashboardService implements OnModuleInit {
 
       // Notify manager of rejection
       try {
-        const manager: ManagerEntity =
-          await this.managers.findByTelegramId(telegramId);
+        const manager: UserEntity =
+          await this.users.findByTelegramId(telegramId);
         if (manager) {
           const mLang: Lang =
             manager.language === language.RU ? language.RU : language.UZ;
@@ -1633,7 +1700,7 @@ export class ScenarioDashboardService implements OnModuleInit {
         await this.requests.findByIdWithWorker(requestId);
       if (!request || !request.worker) return;
 
-      const worker: WorkerEntity = request.worker;
+      const worker: UserEntity = request.worker;
       const workerLang: Lang =
         worker.language === language.RU ? language.RU : language.UZ;
 
@@ -1682,12 +1749,12 @@ export class ScenarioDashboardService implements OnModuleInit {
   // Boshqa super adminlarga tasdiqlash haqida xabar berish
   private async notifyOtherSuperAdminsAboutApproval(
     requestId: number,
-    worker: WorkerEntity,
+    worker: UserEntity,
     approverName: string,
     comment?: string,
   ): Promise<void> {
     try {
-      const superAdmins: ManagerEntity[] = await this.managers.findByRole(
+      const superAdmins: UserEntity[] = await this.users.listByRole(
         UserRoleEnum.SUPER_ADMIN,
       );
 

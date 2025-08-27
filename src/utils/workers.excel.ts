@@ -1,10 +1,10 @@
 import { Injectable } from '@nestjs/common';
-import { WorkerEntity } from '../entity/workers.entity';
+import { UserEntity } from '../entity/user.entity';
 import { AttendanceEntity } from '../entity/attendance.entity';
 import { RequestEntity } from '../entity/requests.entity';
 
 export interface WorkerAttendanceData {
-  worker: WorkerEntity;
+  worker: UserEntity;
   attendances: AttendanceEntity[];
   requests?: RequestEntity[];
 }
@@ -16,7 +16,9 @@ export class WorkersExcelService {
     const lines: string[] = [];
 
     // Header in Uzbek
-    lines.push('Ishchi nomi,Telegram ID,Sana,Kelish vaqti,Ketish vaqti,Holati,Kech qolish sababi');
+    lines.push(
+      'Ishchi nomi,Telegram ID,Sana,Kelish vaqti,Ketish vaqti,Holati,Kech qolish sababi',
+    );
 
     for (const item of data) {
       const worker = item.worker;

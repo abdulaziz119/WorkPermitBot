@@ -1,6 +1,7 @@
 import { Entity, Column, ManyToOne, JoinColumn } from 'typeorm';
 import { DB_SCHEMA } from '../utils/env/env';
-import { WorkerEntity } from './workers.entity';
+// import { WorkerEntity } from './workers.entity';
+import { UserEntity } from './user.entity';
 import { BaseEntity, cascadeUpdateRelationOptions } from './base.entity';
 
 @Entity({ schema: DB_SCHEMA, name: 'attendance' })
@@ -8,9 +9,9 @@ export class AttendanceEntity extends BaseEntity {
   @Column({ type: 'integer' })
   worker_id: number;
 
-  @ManyToOne(() => WorkerEntity, cascadeUpdateRelationOptions)
+  @ManyToOne(() => UserEntity, cascadeUpdateRelationOptions)
   @JoinColumn({ name: 'worker_id' })
-  worker: WorkerEntity;
+  worker: UserEntity;
 
   // Qaysi kun (faqat sana). Bir ishchi uchun har kunda 1 ta yozuv.
   @Column({ type: 'date' })

@@ -9,8 +9,7 @@ import {
   DB_SCHEMA,
   DB_USER,
 } from '../utils/env/env';
-import { WorkerEntity } from '../entity/workers.entity';
-import { ManagerEntity } from '../entity/managers.entity';
+import { UserEntity } from '../entity/user.entity';
 import { RequestEntity } from '../entity/requests.entity';
 import { AttendanceEntity } from '../entity/attendance.entity';
 
@@ -25,15 +24,10 @@ export const databaseProviders = [
         username: DB_USER,
         password: DB_PASS,
         database: DB_DB,
-        synchronize: false,
+        synchronize: true,
         logging: false,
         schema: DB_SCHEMA,
-        entities: [
-          WorkerEntity,
-          ManagerEntity,
-          RequestEntity,
-          AttendanceEntity,
-        ],
+        entities: [UserEntity, RequestEntity, AttendanceEntity],
         // extra: {
         //   timezone: 'UTC',
         // },
