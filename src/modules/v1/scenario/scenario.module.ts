@@ -9,12 +9,7 @@ import { ScenarioNotificationService } from './scenario.notification.service';
 import { WorkersExcelService } from '../../../utils/workers.excel';
 
 @Module({
-  imports: [
-    DatabaseModule,
-    UsersModule,
-    RequestModule,
-    AttendanceModule,
-  ],
+  imports: [DatabaseModule, UsersModule, RequestModule, AttendanceModule],
   controllers: [],
   providers: [
     ScenarioFrontendService,

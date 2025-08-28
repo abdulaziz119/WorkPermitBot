@@ -1,16 +1,12 @@
 import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { Markup, Context, Telegraf } from 'telegraf';
 import { ensureBotLaunched, getBot } from './bot.instance';
-// import { ManagersService } from '../managers/managers.service';
-// import { WorkersService } from '../workers/workers.service';
 import { UsersService } from '../users/users.service';
 import { RequestsService } from '../requests/requests.service';
 import { AttendanceService } from '../attendance/attendance.service';
 import { ScenarioNotificationService } from './scenario.notification.service';
 import { WorkersExcelService } from '../../../utils/workers.excel';
 import { language, UserRoleEnum } from '../../../utils/enum/user.enum';
-// import { UserEntity } from '../../../entity/managers.entity';
-// import { UserEntity } from '../../../entity/workers.entity';
 import { UserEntity } from '../../../entity/user.entity';
 import { RequestEntity } from '../../../entity/requests.entity';
 import { AttendanceEntity } from '../../../entity/attendance.entity';
@@ -20,93 +16,12 @@ import {
   HourlyRequestTypeEnum,
 } from '../../../utils/enum/requests.enum';
 import { formatUzbekistanTime } from '../../../utils/time/uzbekistan-time';
+import { T, Lang } from './ui/translations';
+import { getAdminMenu } from './ui/admin.menu';
+import { getSuperAdminMenu } from './ui/super-admin.menu';
+import { mainMenuKeyboard } from './ui/shared.components';
 
 type Ctx = Context & { session?: Record<string, any> };
-type Lang = language.UZ | language.RU;
-
-const T = {
-  uz: {
-    managerMenuTitle: 'Manager menyusi:',
-    superAdminMenuTitle: 'Super Admin menyusi:',
-    notActiveManager: 'Siz active manager emassiz.',
-    notSuperAdmin: 'Siz super admin emassiz.',
-    activateOk:
-      'Siz manager sifatida faollashtirildingiz ✅. /manager buyrugʼini bosing.',
-    activateNotFound: 'Manager sifatida roʼyxatda topilmadingiz.',
-    deactivateOk: 'Manager holati oʼchirildi.',
-    deactivateNotFound: 'Manager sifatida topilmadingiz',
-    noPermission: 'Ruxsat yoʼq',
-    pendingEmpty: 'Kutilayotgan soʼrovlar yoʼq.',
-    approveBtn: 'Tasdiqlash ✅',
-    rejectBtn: 'Rad etish ❌',
-    approvalCommentPrompt:
-      'Izoh kiriting (ixtiyoriy). Ushbu xabar yuborilgach qaror saqlanadi.',
-    approvedMsg: (id: number) => `#${id} tasdiqlandi ✅`,
-    rejectedMsg: (id: number) => `#${id} rad etildi ❌`,
-    unverifiedWorkersEmpty: 'Tasdiqlanmagan ishchilar yoʼq.',
-    verifiedWorkersEmpty: 'Tasdiqlangan ishchilar yoʼq.',
-    unverifiedManagersEmpty: 'Tasdiqlanmagan managerlar yoʼq.',
-    workerVerifyBtn: 'Tasdiqlash 👌',
-    workerVerifiedMsg: (name: string) => `Ishchi tasdiqlandi: ${name}`,
-    managerVerifiedMsg: (name: string) => `Manager tasdiqlandi: ${name}`,
-    managerPendingBtn: 'Kutilayotgan soʼrovlar 🔔',
-    managerUnverifiedBtn: 'Tasdiqlanmagan ishchilar 👤',
-    superAdminUnverifiedManagersBtn: 'Tasdiqlanmagan managerlar 👨‍💼',
-    viewWorkersBtn: 'Ishchilarni koʼrish 👥',
-    backBtn: 'Qaytish ◀',
-    nextBtn: 'Keyingi ➡️',
-    prevBtn: '⬅️ Oldingi',
-    mainMenuBtn: 'Asosiy menyu 🏠',
-    attendanceToday: 'Bugun',
-    attendancePresent: '✅ Kelgan',
-    attendanceAbsent: '❌ Kelmagan',
-    exportDaily: '1 kunlik 📊',
-    exportWeekly: '1 haftalik 📊',
-    exportMonthly: '1 oylik 📊',
-    exportYearly: '1 yillik 📊',
-    notFound: 'Topilmadi',
-  },
-  ru: {
-    managerMenuTitle: 'Меню менеджера:',
-    superAdminMenuTitle: 'Меню супер админа:',
-    notActiveManager: 'Вы не активный менеджер.',
-    notSuperAdmin: 'Вы не супер админ.',
-    activateOk: 'Вы активированы как менеджер ✅. Нажмите /manager для меню.',
-    activateNotFound: 'Вы не найдены как менеджер.',
-    deactivateOk: 'Статус менеджера отключён.',
-    deactivateNotFound: 'Вы не найдены как менеджер.',
-    noPermission: 'Нет доступа',
-    pendingEmpty: 'Нет ожидающих запросов.',
-    approveBtn: 'Одобрить ✅',
-    rejectBtn: 'Отклонить ❌',
-    approvalCommentPrompt:
-      'Введите комментарий (необязательно). После отправки решение будет сохранено.',
-    approvedMsg: (id: number) => `#${id} одобрен ✅`,
-    rejectedMsg: (id: number) => `#${id} отклонён ❌`,
-    unverifiedWorkersEmpty: 'Нет неподтверждённых работников.',
-    verifiedWorkersEmpty: 'Нет подтверждённых работников.',
-    unverifiedManagersEmpty: 'Нет неподтверждённых менеджеров.',
-    workerVerifyBtn: 'Подтвердить 👌',
-    workerVerifiedMsg: (name: string) => `Работник подтверждён: ${name}`,
-    managerVerifiedMsg: (name: string) => `Менеджер подтверждён: ${name}`,
-    managerPendingBtn: 'Ожидающие запросы 🔔',
-    managerUnverifiedBtn: 'Неподтверждённые работники 👤',
-    superAdminUnverifiedManagersBtn: 'Неподтверждённые менеджеры 👨‍💼',
-    viewWorkersBtn: 'Просмотр работников 👥',
-    backBtn: 'Назад ◀',
-    nextBtn: 'Далее ➡️',
-    prevBtn: '⬅️ Назад',
-    mainMenuBtn: 'Главное меню 🏠',
-    attendanceToday: 'Сегодня',
-    attendancePresent: '✅ Пришёл',
-    attendanceAbsent: '❌ Не пришёл',
-    exportDaily: '1 день 📊',
-    exportWeekly: '1 неделя 📊',
-    exportMonthly: '1 месяц 📊',
-    exportYearly: '1 год 📊',
-    notFound: 'Не найдено',
-  },
-} as const;
 
 @Injectable()
 export class ScenarioDashboardService implements OnModuleInit {
@@ -143,34 +58,15 @@ export class ScenarioDashboardService implements OnModuleInit {
   }
 
   private managerMenu(lang: Lang) {
-    const tr = T[lang];
-    return Markup.inlineKeyboard([
-      [Markup.button.callback(tr.managerPendingBtn, 'mgr_pending')],
-      [Markup.button.callback(tr.managerUnverifiedBtn, 'mgr_workers_pending')],
-      [Markup.button.callback(tr.viewWorkersBtn, 'mgr_view_workers')],
-    ]);
+    return getAdminMenu(lang);
   }
 
   private superAdminMenu(lang: Lang) {
-    const tr = T[lang];
-    return Markup.inlineKeyboard([
-      [Markup.button.callback(tr.managerPendingBtn, 'mgr_pending')],
-      [Markup.button.callback(tr.managerUnverifiedBtn, 'mgr_workers_pending')],
-      [
-        Markup.button.callback(
-          tr.superAdminUnverifiedManagersBtn,
-          'mgr_managers_pending',
-        ),
-      ],
-      [Markup.button.callback(tr.viewWorkersBtn, 'mgr_view_workers')],
-    ]);
+    return getSuperAdminMenu(lang);
   }
 
   private backToMenuKeyboard(lang: Lang) {
-    const tr = T[lang];
-    return Markup.inlineKeyboard([
-      [Markup.button.callback(tr.mainMenuBtn, 'mgr_back_to_menu')],
-    ]);
+    return mainMenuKeyboard(lang);
   }
 
   // Quick helper to show main menu after actions
@@ -564,7 +460,9 @@ export class ScenarioDashboardService implements OnModuleInit {
       // Notify other managers (admins + super admins) about decision
       try {
         const adminManagers = await this.users.listByRole(UserRoleEnum.ADMIN);
-        const superAdminManagers = await this.users.listByRole(UserRoleEnum.SUPER_ADMIN);
+        const superAdminManagers = await this.users.listByRole(
+          UserRoleEnum.SUPER_ADMIN,
+        );
         const allManagers = [...adminManagers, ...superAdminManagers];
         const others = allManagers.filter(
           (m) =>
@@ -670,7 +568,9 @@ export class ScenarioDashboardService implements OnModuleInit {
         // Broadcast decision
         try {
           const adminManagers = await this.users.listByRole(UserRoleEnum.ADMIN);
-          const superAdminManagers = await this.users.listByRole(UserRoleEnum.SUPER_ADMIN);
+          const superAdminManagers = await this.users.listByRole(
+            UserRoleEnum.SUPER_ADMIN,
+          );
           const allManagers = [...adminManagers, ...superAdminManagers];
           const others = allManagers.filter(
             (m) =>

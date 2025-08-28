@@ -1,8 +1,6 @@
 import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { Telegraf, Markup, Context } from 'telegraf';
 import { ensureBotLaunched, getBot } from './bot.instance';
-// import { WorkersService } from '../workers/workers.service';
-// import { ManagersService } from '../managers/managers.service';
 import { UsersService } from '../users/users.service';
 import { RequestsService } from '../requests/requests.service';
 import { AttendanceService } from '../attendance/attendance.service';
@@ -14,8 +12,6 @@ import {
   REMINDER_CHECKOUT_HH,
   REMINDER_CHECKOUT_MM,
 } from '../../../utils/env/env';
-// import { UserEntity } from '../../../entity/workers.entity';
-// import { UserEntity } from '../../../entity/managers.entity';
 import { UserEntity } from '../../../entity/user.entity';
 import { RequestEntity } from '../../../entity/requests.entity';
 import { AttendanceEntity } from '../../../entity/attendance.entity';
@@ -26,196 +22,16 @@ import {
 } from '../../../utils/enum/requests.enum';
 import {
   getUzbekistanTime,
-  getCurrentHourInUzbekistan,
   formatUzbekistanTime,
-  formatUzbekistanHourMinute,
   formatRawHourMinute,
 } from '../../../utils/time/uzbekistan-time';
+import { T, Lang } from './ui/translations';
+import { getWorkerMenu } from './ui/worker.menu';
+import { backKeyboard } from './ui/shared.components';
+import { getAdminMenu } from './ui/admin.menu';
+import { getSuperAdminMenu } from './ui/super-admin.menu';
 
 type Ctx = Context & { session?: Record<string, any> };
-
-// Supported interface languages (restrict to Uzbek & Russian for bot UI)
-type Lang = language.UZ | language.RU; // resolves to 'uz' | 'ru'
-const T = {
-  uz: {
-    chooseLang: 'Tilni tanlang:',
-    langUz: '🇺🇿 Oʻzbekcha',
-    langRu: '🇷🇺 Русский',
-    chooseRole: 'Rolingizni tanlang:',
-    roleWorker: '👷 Ishchi',
-    roleManager: '👨‍💼 Menejer',
-    workerCreated: 'Ishchi profili yaratildi. Menejer tasdigʻini kuting.',
-    managerCreated:
-      'Menejer profili yaratildi. Super admin tasdiqlashi kutilmoqda.',
-    saved: 'Saqlandi ✅',
-    enterFullname: 'Iltimos, toʼliq ismingizni kiriting:',
-    invalidFullname: 'Ism juda qisqa. Iltimos, toʼliq ismingizni kiriting.',
-    greetingVerified: (name: string) => `Salom, ${name}. Asosiy menyu:`,
-    greetingPending: (name: string) =>
-      `Salom, ${name}. Roʼyxatdan oʼtish uchun menejer tasdiqlashi kerak.`,
-    greetingManagerPending: (name: string) =>
-      `Salom, ${name}. Roʼyxatdan oʼtish uchun super admin tasdiqlashi kerak.`,
-    btnCheckIn: 'Kelish (Check-in) ✅',
-    btnCheckOut: 'Ketish (Check-out) 🕘',
-    btnRequestLeave: 'Javob soʼrash 📝',
-    btnRequestDaily: '🗓 Kunlik javob (1+ kun)',
-    btnRequestHourly: '⏰ Soatlik javob (yarim kun)',
-    btnMyRequests: 'Mening soʼrovlarim 📄',
-    btnLateComment: 'Kech qolish sababi 💬',
-    backBtn: 'Qaytish ◀',
-    btnWaiting: 'Tasdiqlashni kutish ⏳',
-    statusPending: 'Kutilmoqda',
-    statusApproved: 'Ruxsat',
-    statusRejected: 'Javob berilmadi',
-    pastDateNotAllowed:
-      "O'tib ketgan kunni tanlab bo'lmaydi. Bugungi yoki kelajakdagi sanani kiriting.",
-    returnBeforeApproved:
-      'Qaytish sanasi ruxsat olingan sanadan oldin boʼlishi mumkin emas.',
-    notVerified: 'Siz hali tasdiqlanmagansiz',
-    checkInDone: 'Check-in qayd etildi ✅',
-    checkOutDone: 'Check-out qayd etildi 🕘',
-    checkInAlready: 'Bugun allaqachon check-in qilingan.',
-    checkOutAlready: 'Bugun allaqachon check-out qilingan.',
-    checkInRequired: 'Avval check-in bosing, soʼng check-out.',
-    enterDate:
-      'Iltimos, ruxsat olinadigan sanani kiriting (format: DD.MM yoki DD-MM). Masalan: 22.08',
-    enterReturnDate:
-      'Iltimos, ishga qaytish sanani kiriting (format: DD.MM yoki DD-MM). Masalan: 25.08',
-    invalidDate:
-      'Notoʼgʼri sana. Iltimos, DD.MM formatida kiriting. Masalan: 05.09',
-    enterReasonShort: 'Sababni yozing (masalan: oilaviy ishlar).',
-    enterReason:
-      'Iltimos, javob sababi va sanasini kiriting. Masalan: "22-avgust – oilaviy ishlar"',
-    enterLateComment: 'Kech qolish sababini yozing:',
-    lateCommentAdded: 'Kech qolish sababi saqlandi ✅',
-    requestAccepted: (id: number) =>
-      `Soʼrovingiz qabul qilindi (#${id}). Menejer tasdiqlashi kutilmoqda.`,
-    newRequestNotify: (id: number, workerId: number, reason: string) =>
-      `Yangi soʼrov #${id} • Worker:${workerId} • ${reason}`,
-    noRequests: 'Sizda soʼrovlar yoʼq.',
-    managerMenuTitle: 'Manager menyusi:',
-    notActiveManager: 'Siz active manager emassiz.',
-    activateOk:
-      'Siz manager sifatida faollashtirildingiz ✅. /manager buyrugʼini bosing.',
-    activateNotFound: 'Manager sifatida roʼyxatda topilmadingiz.',
-    deactivateOk: 'Manager holati oʼchirildi.',
-    deactivateNotFound: 'Manager sifatida topilmadingiz',
-    noPermission: 'Ruxsat yoʼq',
-    pendingEmpty: 'Kutilayotgan soʼrovlar yoʼq.',
-    approveBtn: 'Tasdiqlash ✅',
-    rejectBtn: 'Rad etish ❌',
-    approvalCommentPrompt:
-      'Izoh kiriting (ixtiyoriy). Ushbu xabar yuborilgach qaror saqlanadi.',
-    approvedMsg: (id: number) => `#${id} tasdiqlandi ✅`,
-    rejectedMsg: (id: number) => `#${id} rad etildi ❌`,
-    unverifiedWorkersEmpty: 'Tasdiqlanmagan ishchilar yoʼq.',
-    workerVerifyBtn: 'Tasdiqlash 👌',
-    workerVerifiedMsg: (name: string) => `Ishchi tasdiqlandi: ${name}`,
-    newWorkerNotify: (name: string, tgId: number) =>
-      `Yangi ishchi: ${name} (tg:${tgId}). Tasdiqlash kerak.`,
-    managerMenuHint: 'Manager menyusi uchun /manager buyrugʼidan foydalaning.',
-    managerPendingBtn: 'Kutilayotgan soʼrovlar 🔔',
-    managerUnverifiedBtn: 'Tasdiqlanmagan ishchilar 👤',
-    viewWorkersBtn: 'Ishchilarni koʼrish 👥',
-    notFound: 'Topilmadi',
-    commentLabel: 'Izoh',
-    approvedByManager: 'Profilingiz menejer tomonidan tasdiqlandi ✅',
-    prevBtn: '⬅️ Oldingi',
-    nextBtn: 'Keyingi ➡️',
-    pageInfo: (current: number, total: number) => `Sahifa ${current}/${total}`,
-    attendancePresent: '✅ Kelgan',
-    attendanceAbsent: '❌ Kelmagan',
-  },
-  ru: {
-    chooseLang: 'Выберите язык:',
-    langUz: '🇺🇿 Узбекский',
-    langRu: '🇷🇺 Русский',
-    chooseRole: 'Выберите свою роль:',
-    roleWorker: '👷 Работник',
-    roleManager: '👨‍💼 Менеджер',
-    workerCreated:
-      'Профиль работника создан. Ожидайте подтверждения менеджера.',
-    managerCreated:
-      'Профиль менеджера создан. Ожидается подтверждение супер админа.',
-    saved: 'Сохранено ✅',
-    enterFullname: 'Пожалуйста, введите ваше полное имя:',
-    invalidFullname: 'Слишком короткое имя. Введите полное имя.',
-    greetingVerified: (name: string) => `Здравствуйте, ${name}. Главное меню:`,
-    greetingPending: (name: string) =>
-      `Здравствуйте, ${name}. Для завершения регистрации менеджер должен подтвердить вас.`,
-    greetingManagerPending: (name: string) =>
-      `Здравствуйте, ${name}. Для завершения регистрации супер админ должен подтвердить вас.`,
-    btnCheckIn: 'Пришёл (Check-in) ✅',
-    btnCheckOut: 'Ушёл (Check-out) 🕘',
-    btnRequestLeave: 'Запросить отгул 📝',
-    btnRequestDaily: '🗓 Дневной отгул (1+ день)',
-    btnRequestHourly: '⏰ Часовой отгул (полдня)',
-    btnMyRequests: 'Мои запросы 📄',
-    btnLateComment: 'Причина опоздания 💬',
-    backBtn: 'Назад ◀',
-    btnWaiting: 'Ожидается подтверждение ⏳',
-    statusPending: 'В ожидании',
-    statusApproved: 'Одобрено',
-    statusRejected: 'Не одобрено',
-    pastDateNotAllowed:
-      'Нельзя выбрать прошедшую дату. Введите сегодняшнюю или будущую.',
-    returnBeforeApproved: 'Дата возвращения не может быть раньше даты отгула.',
-    notVerified: 'Вы ещё не подтверждены',
-    checkInDone: 'Check-in записан ✅',
-    checkOutDone: 'Check-out записан 🕘',
-    checkInAlready: 'Сегодня check-in уже выполнен.',
-    checkOutAlready: 'Сегодня check-out уже выполнен.',
-    checkInRequired: 'Сначала выполните check-in, затем check-out.',
-    enterDate:
-      'Пожалуйста, введите дату отгула (формат: ДД.ММ или ДД-ММ). Например: 22.08',
-    enterReturnDate:
-      'Пожалуйста, введите дату возвращения на работу (формат: ДД.ММ или ДД-ММ). Например: 25.08',
-    invalidDate: 'Неверная дата. Введите в формате ДД.ММ. Например: 05.09',
-    enterReasonShort: 'Введите причину (например: семейные дела).',
-    enterReason:
-      'Пожалуйста, введите причину и дату. Например: "22-августа – семейные дела"',
-    enterLateComment: 'Введите причину опоздания:',
-    lateCommentAdded: 'Причина опоздания сохранена ✅',
-    noAttendanceToday: 'Сегодня посещаемость не зарегистрирована',
-    requestAccepted: (id: number) =>
-      `Ваш запрос принят (#${id}). Ожидается подтверждение менеджера.`,
-    newRequestNotify: (id: number, workerId: number, reason: string) =>
-      `Новый запрос #${id} • Worker:${workerId} • ${reason}`,
-    noRequests: 'У вас нет запросов.',
-    managerMenuTitle: 'Меню менеджера:',
-    notActiveManager: 'Вы не активный менеджер.',
-    activateOk: 'Вы активированы как менеджер ✅. Нажмите /manager для меню.',
-    activateNotFound: 'Вы не найдены как менеджер.',
-    deactivateOk: 'Статус менеджера отключён.',
-    deactivateNotFound: 'Вы не найдены как менеджер.',
-    noPermission: 'Нет доступа',
-    pendingEmpty: 'Нет ожидающих запросов.',
-    approveBtn: 'Одобрить ✅',
-    rejectBtn: 'Отклонить ❌',
-    approvalCommentPrompt:
-      'Введите комментарий (необязательно). После отправки решение будет сохранено.',
-    approvedMsg: (id: number) => `#${id} одобрен ✅`,
-    rejectedMsg: (id: number) => `#${id} отклонён ❌`,
-    unverifiedWorkersEmpty: 'Нет неподтверждённых работников.',
-    workerVerifyBtn: 'Подтвердить 👌',
-    workerVerifiedMsg: (name: string) => `Работник подтверждён: ${name}`,
-    newWorkerNotify: (name: string, tgId: number) =>
-      `Новый работник: ${name} (tg:${tgId}). Требуется подтверждение.`,
-    managerMenuHint: 'Для меню менеджера используйте команду /manager.',
-    managerPendingBtn: 'Ожидающие запросы 🔔',
-    managerUnverifiedBtn: 'Неподтверждённые работники 👤',
-    viewWorkersBtn: 'Просмотр работников 👥',
-    notFound: 'Не найдено',
-    commentLabel: 'Комментарий',
-    approvedByManager: 'Ваш профиль подтверждён менеджером ✅',
-    prevBtn: '⬅️ Назад',
-    nextBtn: 'Далее ➡️',
-    pageInfo: (current: number, total: number) =>
-      `Страница ${current}/${total}`,
-    attendancePresent: '✅ Пришёл',
-    attendanceAbsent: '❌ Не пришёл',
-  },
-} as const;
 
 @Injectable()
 export class ScenarioFrontendService implements OnModuleInit {
@@ -257,36 +73,11 @@ export class ScenarioFrontendService implements OnModuleInit {
   }
 
   private mainMenu(isVerified: boolean, lang: Lang, worker?: UserEntity) {
-    const tr = T[lang];
-    const buttons = [] as any[];
-    if (isVerified) {
-      // NOTE: We don't know worker context here (no ctx). Basic menu without leave-day logic.
-      // Leave-day specific disabling handled in replyFresh/back_to_menu where we can evaluate worker.
-      buttons.push([Markup.button.callback(tr.btnCheckIn, 'check_in')]);
-      buttons.push([Markup.button.callback(tr.btnCheckOut, 'check_out')]);
-      buttons.push([
-        Markup.button.callback(tr.btnRequestLeave, 'request_leave'),
-      ]);
-      buttons.push([Markup.button.callback(tr.btnMyRequests, 'my_requests')]);
-      buttons.push([Markup.button.callback(tr.btnLateComment, 'late_comment')]);
-
-      // Project Manager uchun qo'shimcha tugma
-      if (worker && worker.role === UserRoleEnum.PROJECT_MANAGER) {
-        buttons.push([
-          Markup.button.callback(tr.viewWorkersBtn, 'worker_view_workers'),
-        ]);
-      }
-    } else {
-      buttons.push([Markup.button.callback(tr.btnWaiting, 'noop')]);
-    }
-    return Markup.inlineKeyboard(buttons);
+    return getWorkerMenu(lang, isVerified, worker);
   }
 
   private backKeyboard(lang: Lang) {
-    const tr = T[lang];
-    return Markup.inlineKeyboard([
-      [Markup.button.callback(tr.backBtn, 'back_to_worker_menu')],
-    ]);
+    return backKeyboard(lang, 'back_to_worker_menu');
   }
 
   // Always send a fresh message at bottom (after deleting old inline one)
@@ -400,43 +191,13 @@ export class ScenarioFrontendService implements OnModuleInit {
     const isSuperAdmin: boolean = await this.users.isSuperAdmin(
       manager.telegram_id,
     );
-    const menuButtons: any[] = [];
 
-    // Pending requests
-    menuButtons.push([
-      Markup.button.callback(tr.managerPendingBtn, 'mgr_pending'),
-    ]);
-
-    // Unverified workers
-    menuButtons.push([
-      Markup.button.callback(tr.managerUnverifiedBtn, 'mgr_workers_pending'),
-    ]);
-
-    // Super admin only: unverified managers
-    if (isSuperAdmin) {
-      menuButtons.push([
-        Markup.button.callback(
-          lang === language.RU
-            ? 'Неподтверждённые менеджеры 👨‍💼'
-            : 'Tasdiqlanmagan managerlar 👨‍💼',
-          'mgr_managers_pending',
-        ),
-      ]);
-    }
-
-    // View workers
-    menuButtons.push([
-      Markup.button.callback(tr.viewWorkersBtn, 'mgr_view_workers'),
-    ]);
-
+    const menu = isSuperAdmin ? getSuperAdminMenu(lang) : getAdminMenu(lang);
     const title = isSuperAdmin
-      ? lang === language.RU
-        ? 'Меню супер админа:'
-        : 'Super Admin menyusi:'
-      : lang === language.RU
-        ? 'Меню менеджера:'
-        : 'Manager menyusi:';
-    await ctx.reply(title, Markup.inlineKeyboard(menuButtons));
+      ? T[lang].superAdminMenuTitle
+      : T[lang].managerMenuTitle;
+
+    await ctx.reply(title, menu);
   }
 
   // manager menu is handled in dashboard service
@@ -1143,6 +904,7 @@ export class ScenarioFrontendService implements OnModuleInit {
           T[lang].requestAccepted(req.id),
           this.mainMenu(true, lang, worker),
         );
+        // Notify managers based on request type
         await this.notifyManagersNewRequest(req, worker, reason);
         return; // stop here
       }
@@ -2040,7 +1802,10 @@ export class ScenarioFrontendService implements OnModuleInit {
       const superAdminManagers: UserEntity[] = await this.users.listByRole(
         UserRoleEnum.SUPER_ADMIN,
       );
-      const allManagers: UserEntity[] = [...adminManagers, ...superAdminManagers];
+      const allManagers: UserEntity[] = [
+        ...adminManagers,
+        ...superAdminManagers,
+      ];
 
       let targetManagers: UserEntity[] = [];
 
