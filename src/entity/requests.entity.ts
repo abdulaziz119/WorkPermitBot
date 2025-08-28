@@ -1,6 +1,4 @@
 import { Entity, Column, ManyToOne, JoinColumn } from 'typeorm';
-// import { ManagerEntity } from './managers.entity';
-// import { WorkerEntity } from './workers.entity';
 import { UserEntity } from './user.entity';
 import { BaseEntity, cascadeUpdateRelationOptions } from './base.entity';
 import { DB_SCHEMA } from '../utils/env/env';

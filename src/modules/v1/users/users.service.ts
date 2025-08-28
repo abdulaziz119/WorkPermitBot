@@ -109,7 +109,11 @@ export class UsersService {
   async listVerifiedWorkers(): Promise<UserEntity[]> {
     return this.repo.find({
       where: {
-        role: In([UserRoleEnum.WORKER, UserRoleEnum.PROJECT_MANAGER]),
+        role: In([
+          UserRoleEnum.WORKER,
+          UserRoleEnum.PROJECT_MANAGER,
+          UserRoleEnum.ADMIN,
+        ]),
         is_verified: true,
       },
       order: { created_at: 'ASC' },
@@ -120,7 +124,11 @@ export class UsersService {
     const offset = (page - 1) * limit;
     const [workers, total] = await this.repo.findAndCount({
       where: {
-        role: In([UserRoleEnum.WORKER, UserRoleEnum.PROJECT_MANAGER]),
+        role: In([
+          UserRoleEnum.WORKER,
+          UserRoleEnum.PROJECT_MANAGER,
+          UserRoleEnum.ADMIN,
+        ]),
         is_verified: true,
       },
       order: { created_at: 'ASC' },

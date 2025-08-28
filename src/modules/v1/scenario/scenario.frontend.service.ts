@@ -80,6 +80,21 @@ export class ScenarioFrontendService implements OnModuleInit {
     return backKeyboard(lang, 'back_to_worker_menu');
   }
 
+  // Helper function to determine correct menu based on user role
+  private async getCorrectMenuForUser(ctx: Ctx, user: UserEntity, lang: Lang) {
+    if (
+      user.role === UserRoleEnum.ADMIN ||
+      user.role === UserRoleEnum.SUPER_ADMIN
+    ) {
+      await this.showManagerMenuIfActive(ctx, user, lang);
+    } else {
+      await ctx.reply(
+        T[lang].greetingVerified(user.fullname),
+        this.mainMenu(true, lang, user),
+      );
+    }
+  }
+
   // Always send a fresh message at bottom (after deleting old inline one)
   private async replyFresh(
     ctx: Ctx,
@@ -354,7 +369,16 @@ export class ScenarioFrontendService implements OnModuleInit {
       try {
         if ('message' in ctx.callbackQuery) await ctx.deleteMessage();
       } catch {}
-      await ctx.reply(T[lang].checkInDone, this.mainMenu(true, lang, worker));
+
+      // Check if user is admin/super admin and show appropriate menu
+      if (
+        worker.role === UserRoleEnum.ADMIN ||
+        worker.role === UserRoleEnum.SUPER_ADMIN
+      ) {
+        await this.showManagerMenuIfActive(ctx, worker, lang);
+      } else {
+        await ctx.reply(T[lang].checkInDone, this.mainMenu(true, lang, worker));
+      }
     });
 
     bot.action('check_out', async (ctx) => {
@@ -393,7 +417,19 @@ export class ScenarioFrontendService implements OnModuleInit {
       try {
         if ('message' in ctx.callbackQuery) await ctx.deleteMessage();
       } catch {}
-      await ctx.reply(T[lang].checkOutDone, this.mainMenu(true, lang, worker));
+
+      // Check if user is admin/super admin and show appropriate menu
+      if (
+        worker.role === UserRoleEnum.ADMIN ||
+        worker.role === UserRoleEnum.SUPER_ADMIN
+      ) {
+        await this.showManagerMenuIfActive(ctx, worker, lang);
+      } else {
+        await ctx.reply(
+          T[lang].checkOutDone,
+          this.mainMenu(true, lang, worker),
+        );
+      }
     });
 
     // Worker: create request (type selection)
@@ -536,10 +572,18 @@ export class ScenarioFrontendService implements OnModuleInit {
       ctx.session['awaiting_reason'] = false;
       ctx.session['awaiting_late_comment'] = false;
 
-      await ctx.reply(
-        T[lang].greetingVerified(worker.fullname),
-        this.mainMenu(true, lang, worker),
-      );
+      // Check if user is admin/super admin and show appropriate menu
+      if (
+        worker.role === UserRoleEnum.ADMIN ||
+        worker.role === UserRoleEnum.SUPER_ADMIN
+      ) {
+        await this.showManagerMenuIfActive(ctx, worker, lang);
+      } else {
+        await ctx.reply(
+          T[lang].greetingVerified(worker.fullname),
+          this.mainMenu(true, lang, worker),
+        );
+      }
     });
 
     // Worker: add late comment
@@ -900,10 +944,20 @@ export class ScenarioFrontendService implements OnModuleInit {
         );
 
         ctx.session['req_flow'] = undefined;
-        await ctx.reply(
-          T[lang].requestAccepted(req.id),
-          this.mainMenu(true, lang, worker),
-        );
+
+        // Check if user is admin/super admin and show appropriate menu
+        if (
+          worker.role === UserRoleEnum.ADMIN ||
+          worker.role === UserRoleEnum.SUPER_ADMIN
+        ) {
+          await ctx.reply(T[lang].requestAccepted(req.id));
+          await this.showManagerMenuIfActive(ctx, worker, lang);
+        } else {
+          await ctx.reply(
+            T[lang].requestAccepted(req.id),
+            this.mainMenu(true, lang, worker),
+          );
+        }
         // Notify managers based on request type
         await this.notifyManagersNewRequest(req, worker, reason);
         return; // stop here
@@ -926,10 +980,20 @@ export class ScenarioFrontendService implements OnModuleInit {
           undefined,
         );
         ctx.session['awaiting_reason'] = false;
-        await ctx.reply(
-          T[lang].requestAccepted(req.id),
-          this.mainMenu(true, lang, worker),
-        );
+
+        // Check if user is admin/super admin and show appropriate menu
+        if (
+          worker.role === UserRoleEnum.ADMIN ||
+          worker.role === UserRoleEnum.SUPER_ADMIN
+        ) {
+          await ctx.reply(T[lang].requestAccepted(req.id));
+          await this.showManagerMenuIfActive(ctx, worker, lang);
+        } else {
+          await ctx.reply(
+            T[lang].requestAccepted(req.id),
+            this.mainMenu(true, lang, worker),
+          );
+        }
         await this.notifyManagersNewRequest(req, worker, reason);
         return;
       }
@@ -956,10 +1020,19 @@ export class ScenarioFrontendService implements OnModuleInit {
         const result = await this.attendance.addLateComment(worker.id, comment);
         ctx.session['awaiting_late_comment'] = false;
 
-        await ctx.reply(
-          T[lang].lateCommentAdded,
-          this.mainMenu(true, lang, worker),
-        );
+        // Check if user is admin/super admin and show appropriate menu
+        if (
+          worker.role === UserRoleEnum.ADMIN ||
+          worker.role === UserRoleEnum.SUPER_ADMIN
+        ) {
+          await ctx.reply(T[lang].lateCommentAdded);
+          await this.showManagerMenuIfActive(ctx, worker, lang);
+        } else {
+          await ctx.reply(
+            T[lang].lateCommentAdded,
+            this.mainMenu(true, lang, worker),
+          );
+        }
         return;
       }
       return next();
@@ -1251,7 +1324,14 @@ export class ScenarioFrontendService implements OnModuleInit {
           status = lang === language.RU ? '❌ Не пришёл' : '❌ Kelmagan';
         }
 
-        const roleIcon = w.role === UserRoleEnum.PROJECT_MANAGER ? '👨‍💼' : '👷';
+        const roleIcon =
+          w.role === UserRoleEnum.PROJECT_MANAGER
+            ? '👨‍💼'
+            : w.role === UserRoleEnum.ADMIN
+              ? '🔧'
+              : w.role === UserRoleEnum.SUPER_ADMIN
+                ? '👑'
+                : '👷';
 
         buttons.push([
           Markup.button.callback(
@@ -1339,9 +1419,17 @@ export class ScenarioFrontendService implements OnModuleInit {
           ? lang === language.RU
             ? 'Проект-менеджер'
             : 'Loyiha menejeri'
-          : lang === language.RU
-            ? 'Работник'
-            : 'Ishchi';
+          : worker.role === UserRoleEnum.ADMIN
+            ? lang === language.RU
+              ? 'Админ'
+              : 'Admin'
+            : worker.role === UserRoleEnum.SUPER_ADMIN
+              ? lang === language.RU
+                ? 'Супер Админ'
+                : 'Super Admin'
+              : lang === language.RU
+                ? 'Работник'
+                : 'Ishchi';
 
       let message = `👤 ${worker.fullname}\n📋 ${lang === language.RU ? 'Роль' : 'Rol'}: ${roleText}\n${lang === language.RU ? 'Сегодня' : 'Bugun'}: ${status}`;
 
@@ -1569,7 +1657,13 @@ export class ScenarioFrontendService implements OnModuleInit {
 
         // Role indicator
         const roleIcon =
-          worker.role === UserRoleEnum.PROJECT_MANAGER ? '👨‍💼' : '👷';
+          worker.role === UserRoleEnum.PROJECT_MANAGER
+            ? '👨‍💼'
+            : worker.role === UserRoleEnum.ADMIN
+              ? '🔧'
+              : worker.role === UserRoleEnum.SUPER_ADMIN
+                ? '👑'
+                : '👷';
 
         buttons.push([
           Markup.button.callback(
@@ -1642,9 +1736,17 @@ export class ScenarioFrontendService implements OnModuleInit {
           ? lang === language.RU
             ? 'Проект Менеджер'
             : 'Project Manager'
-          : lang === language.RU
-            ? 'Работник'
-            : 'Ishchi';
+          : worker.role === UserRoleEnum.ADMIN
+            ? lang === language.RU
+              ? 'Админ'
+              : 'Admin'
+            : worker.role === UserRoleEnum.SUPER_ADMIN
+              ? lang === language.RU
+                ? 'Супер Админ'
+                : 'Super Admin'
+              : lang === language.RU
+                ? 'Работник'
+                : 'Ishchi';
 
       let message = `👤 ${worker.fullname}\n`;
       message += `💼 ${roleText}\n`;
@@ -1903,8 +2005,8 @@ export class ScenarioFrontendService implements OnModuleInit {
             // Show the same raw hour already shown above (avoid different shifted time)
             const leaveTime = formatRawHourMinute(request.hourly_leave_time);
             hourlyTypeInfo = isRu
-              ? `🕐 Тип: ${typeText}`
-              : `🕐 Turi: ${typeText}`;
+              ? `🕐 Тип: ${typeText} (${leaveTime})`
+              : `🕐 Turi: ${typeText} (${leaveTime})`;
           } else {
             hourlyTypeInfo = isRu
               ? `🕐 Тип: ${typeText}`

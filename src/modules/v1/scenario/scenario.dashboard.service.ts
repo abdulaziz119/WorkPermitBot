@@ -978,7 +978,13 @@ export class ScenarioDashboardService implements OnModuleInit {
 
         // Role indicator
         const roleIcon =
-          worker.role === UserRoleEnum.PROJECT_MANAGER ? '👨‍💼' : '👷';
+          worker.role === UserRoleEnum.PROJECT_MANAGER
+            ? '👨‍💼'
+            : worker.role === UserRoleEnum.ADMIN
+              ? '🔧'
+              : worker.role === UserRoleEnum.SUPER_ADMIN
+                ? '👑'
+                : '👷';
 
         buttons.push([
           Markup.button.callback(
@@ -1047,9 +1053,17 @@ export class ScenarioDashboardService implements OnModuleInit {
           ? lang === language.RU
             ? 'Проект Менеджер'
             : 'Project Manager'
-          : lang === language.RU
-            ? 'Работник'
-            : 'Ishchi';
+          : worker.role === UserRoleEnum.ADMIN
+            ? lang === language.RU
+              ? 'Админ'
+              : 'Admin'
+            : worker.role === UserRoleEnum.SUPER_ADMIN
+              ? lang === language.RU
+                ? 'Супер Админ'
+                : 'Super Admin'
+              : lang === language.RU
+                ? 'Работник'
+                : 'Ishchi';
 
       let message = `👤 ${worker.fullname}\n💼 ${roleText}\n${T[lang].attendanceToday}: ${status}`;
 
