@@ -3,8 +3,12 @@ import {
   PrimaryGeneratedColumn,
   UpdateDateColumn,
   DeleteDateColumn,
+  BeforeInsert,
+  BeforeUpdate,
+  BeforeRemove,
 } from 'typeorm';
 import * as Orm from 'typeorm';
+import { getUzbekistanTime } from '../utils/time/uzbekistan-time';
 
 export class BaseEntity {
   @PrimaryGeneratedColumn('increment')
@@ -18,6 +22,22 @@ export class BaseEntity {
 
   @UpdateDateColumn({ type: 'timestamp' })
   updated_at: Date;
+
+  @BeforeInsert()
+  setCreateDate() {
+    this.created_at = getUzbekistanTime();
+    this.updated_at = getUzbekistanTime();
+  }
+
+  @BeforeUpdate()
+  setUpdateDate() {
+    this.updated_at = getUzbekistanTime();
+  }
+
+  @BeforeRemove()
+  setDeleteDate() {
+    this.deleted_at = getUzbekistanTime();
+  }
 }
 
 export const cascadeUpdateRelationOptions: Orm.RelationOptions = {
