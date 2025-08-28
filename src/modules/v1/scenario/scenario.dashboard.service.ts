@@ -1024,6 +1024,10 @@ export class ScenarioDashboardService implements OnModuleInit {
       try {
         await ctx.editMessageText(message, Markup.inlineKeyboard(buttons));
       } catch {
+        // If edit fails, delete the old message and send a new one
+        try {
+          await ctx.deleteMessage();
+        } catch {}
         await ctx.reply(message, Markup.inlineKeyboard(buttons));
       }
     });
@@ -1125,6 +1129,10 @@ export class ScenarioDashboardService implements OnModuleInit {
       try {
         await ctx.editMessageText(message, Markup.inlineKeyboard(buttons));
       } catch {
+        // If edit fails, delete the old message and send a new one
+        try {
+          await ctx.deleteMessage();
+        } catch {}
         await ctx.reply(message, Markup.inlineKeyboard(buttons));
       }
     });
@@ -1324,6 +1332,10 @@ export class ScenarioDashboardService implements OnModuleInit {
         try {
           await ctx.editMessageText(message, Markup.inlineKeyboard(buttons));
         } catch {
+          // If edit fails, delete the old message and send a new one
+          try {
+            await ctx.deleteMessage();
+          } catch {}
           await ctx.reply(message, Markup.inlineKeyboard(buttons));
         }
         return;
@@ -1412,6 +1424,10 @@ export class ScenarioDashboardService implements OnModuleInit {
       try {
         await ctx.editMessageText(message, Markup.inlineKeyboard(buttons));
       } catch {
+        // If edit fails, delete the old message and send a new one
+        try {
+          await ctx.deleteMessage();
+        } catch {}
         await ctx.reply(message, Markup.inlineKeyboard(buttons));
       }
     });

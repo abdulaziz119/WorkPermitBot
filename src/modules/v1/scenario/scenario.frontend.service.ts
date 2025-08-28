@@ -572,12 +572,26 @@ export class ScenarioFrontendService implements OnModuleInit {
       ctx.session['awaiting_reason'] = false;
       ctx.session['awaiting_late_comment'] = false;
 
-      // Check if user is admin/super admin and show appropriate menu
+      // Delete pagination message to clean up chat
+      try {
+        if ('message' in ctx.callbackQuery) {
+          await ctx.deleteMessage();
+        }
+      } catch (error) {
+        // Ignore deletion errors
+      }
+
+      // Check user role and show appropriate menu
       if (
         worker.role === UserRoleEnum.ADMIN ||
         worker.role === UserRoleEnum.SUPER_ADMIN
       ) {
         await this.showManagerMenuIfActive(ctx, worker, lang);
+      } else if (worker.role === UserRoleEnum.PROJECT_MANAGER) {
+        await ctx.reply(
+          T[lang].greetingVerified(worker.fullname),
+          this.mainMenu(true, lang, worker),
+        );
       } else {
         await ctx.reply(
           T[lang].greetingVerified(worker.fullname),
@@ -1371,6 +1385,10 @@ export class ScenarioFrontendService implements OnModuleInit {
       try {
         await ctx.editMessageText(message, Markup.inlineKeyboard(buttons));
       } catch {
+        // If edit fails, delete the old message and send a new one
+        try {
+          await ctx.deleteMessage();
+        } catch {}
         await ctx.reply(message, Markup.inlineKeyboard(buttons));
       }
     });
@@ -1451,6 +1469,10 @@ export class ScenarioFrontendService implements OnModuleInit {
       try {
         await ctx.editMessageText(message, Markup.inlineKeyboard(buttons));
       } catch {
+        // If edit fails, delete the old message and send a new one
+        try {
+          await ctx.deleteMessage();
+        } catch {}
         await ctx.reply(message, Markup.inlineKeyboard(buttons));
       }
     });
@@ -1611,12 +1633,25 @@ export class ScenarioFrontendService implements OnModuleInit {
             ? 'Нет подтверждённых работников'
             : "Tasdiqlangan ishchilar yo'q";
 
-        await ctx.reply(
-          message,
-          Markup.inlineKeyboard([
-            [Markup.button.callback(T[lang].backBtn, 'back_to_worker_menu')],
-          ]),
-        );
+        try {
+          await ctx.editMessageText(
+            message,
+            Markup.inlineKeyboard([
+              [Markup.button.callback(T[lang].backBtn, 'back_to_worker_menu')],
+            ]),
+          );
+        } catch {
+          // If edit fails, delete the old message and send a new one
+          try {
+            await ctx.deleteMessage();
+          } catch {}
+          await ctx.reply(
+            message,
+            Markup.inlineKeyboard([
+              [Markup.button.callback(T[lang].backBtn, 'back_to_worker_menu')],
+            ]),
+          );
+        }
         return;
       }
 
@@ -1692,7 +1727,15 @@ export class ScenarioFrontendService implements OnModuleInit {
       // Back button
       buttons.push([Markup.button.callback(tr.backBtn, 'back_to_worker_menu')]);
 
-      await ctx.reply(message, Markup.inlineKeyboard(buttons));
+      try {
+        await ctx.editMessageText(message, Markup.inlineKeyboard(buttons));
+      } catch {
+        // If edit fails, delete the old message and send a new one
+        try {
+          await ctx.deleteMessage();
+        } catch {}
+        await ctx.reply(message, Markup.inlineKeyboard(buttons));
+      }
     } catch (e) {
       this.logger.error('showWorkersListForProjectManager error', e);
       await ctx.reply(
@@ -1713,12 +1756,25 @@ export class ScenarioFrontendService implements OnModuleInit {
     try {
       const worker: UserEntity = await this.users.findById(workerId);
       if (!worker) {
-        await ctx.reply(
-          lang === language.RU ? 'Работник не найден' : 'Ishchi topilmadi',
-          Markup.inlineKeyboard([
-            [Markup.button.callback(T[lang].backBtn, 'worker_view_workers')],
-          ]),
-        );
+        try {
+          await ctx.editMessageText(
+            lang === language.RU ? 'Работник не найден' : 'Ishchi topilmadi',
+            Markup.inlineKeyboard([
+              [Markup.button.callback(T[lang].backBtn, 'worker_view_workers')],
+            ]),
+          );
+        } catch {
+          // If edit fails, delete the old message and send a new one
+          try {
+            await ctx.deleteMessage();
+          } catch {}
+          await ctx.reply(
+            lang === language.RU ? 'Работник не найден' : 'Ishchi topilmadi',
+            Markup.inlineKeyboard([
+              [Markup.button.callback(T[lang].backBtn, 'worker_view_workers')],
+            ]),
+          );
+        }
         return;
       }
 
@@ -1778,7 +1834,15 @@ export class ScenarioFrontendService implements OnModuleInit {
         [Markup.button.callback(tr.backBtn, 'worker_view_workers')],
       ];
 
-      await ctx.reply(message, Markup.inlineKeyboard(buttons));
+      try {
+        await ctx.editMessageText(message, Markup.inlineKeyboard(buttons));
+      } catch {
+        // If edit fails, delete the old message and send a new one
+        try {
+          await ctx.deleteMessage();
+        } catch {}
+        await ctx.reply(message, Markup.inlineKeyboard(buttons));
+      }
     } catch (e) {
       this.logger.error('showWorkerDetailForProjectManager error', e);
       await ctx.reply(
