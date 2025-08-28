@@ -1830,32 +1830,75 @@ export class ScenarioFrontendService implements OnModuleInit {
 
   private async sendCheckInReminders(): Promise<void> {
     try {
+      // Workers & project managers (verified)
       const workers: UserEntity[] = await this.users.listVerifiedWorkers();
-      if (!workers.length) return;
-      const workerIds: number[] = workers.map((w) => w.id);
-      const todayMap = await this.attendance.getTodayForWorkers(workerIds);
-      const now = new Date(
-        new Date().toLocaleString('en-US', { timeZone: APP_TIMEZONE }),
-      );
+      // Active admins (manager side) should also receive check-in reminder
+      const admins: UserEntity[] = await this.users.listActiveAdmins();
+      const all: UserEntity[] = [...workers, ...admins];
+      if (!all.length) return;
+
+      const ids: number[] = all.map((u) => u.id);
+      const todayMap = await this.attendance.getTodayForWorkers(ids);
+
+      // Build super admin summary of missing check-ins
+      const missing: UserEntity[] = [];
 
       await Promise.all(
-        workers.map(async (w: UserEntity) => {
-          if (this.reminderState.doneMorning.has(w.telegram_id)) return;
-          const rec: AttendanceEntity = todayMap.get(w.id);
-          // Skip if already checked in
-          if (rec?.check_in) return;
-          const lang: Lang =
-            w.language === language.RU ? language.RU : language.UZ;
+        all.map(async (u: UserEntity) => {
+          if (this.reminderState.doneMorning.has(u.telegram_id)) return;
+          const rec: AttendanceEntity = todayMap.get(u.id);
+          if (rec?.check_in) return; // already checked in
+          missing.push(u);
+          const lang: Lang = u.language === language.RU ? language.RU : language.UZ;
           const text =
             lang === language.RU
-              ? 'Пожалуйста, отметьте прибытие: Пришёл (Check-in) ✅'
-              : 'Iltimos, kelganingizni tasdiqlang: Kelish (Check-in) ✅';
+              ? '⏰ Напоминание: отметьте прибытие (Пришёл / Check-in) ✅'
+              : '⏰ Eslatma: kelganingizni belgilang (Kelish / Check-in) ✅';
           await this.bot.telegram
-            .sendMessage(w.telegram_id, text)
-            .then(() => this.reminderState.doneMorning.add(w.telegram_id))
+            .sendMessage(u.telegram_id, text)
+            .then(() => this.reminderState.doneMorning.add(u.telegram_id))
             .catch(() => void 0);
         }),
       );
+
+      // Notify super admins with summary at 09:00 about who has NOT checked in yet (excluding those on approved leave or with approved day off)
+      if (missing.length) {
+        try {
+          // Filter out those who submitted a leave request for today (approved leave)
+          const approvedMap = await this.requests.getApprovedLeaveForToday(
+            missing.map((m) => m.id),
+          );
+          const stillMissing = missing.filter((m) => !approvedMap.get(m.id));
+          if (stillMissing.length) {
+            const superAdmins = await this.users.listByRole(
+              UserRoleEnum.SUPER_ADMIN,
+            );
+            const uzList = stillMissing
+              .map((m) => `• ${m.fullname}`)
+              .join('\n');
+            const ruList = uzList; // names same, text differs below
+            await Promise.all(
+              superAdmins.map((sa) => {
+                const lang: Lang = sa.language === language.RU ? language.RU : language.UZ;
+                const header =
+                  lang === language.RU
+                    ? '📋 Утренний отчёт (09:00) — еще не отметились:'
+                    : "📋 Ertalabki hisobot (09:00) — hali belgilamaganlar:";
+                const body = lang === language.RU ? ruList : uzList;
+                const footer =
+                  lang === language.RU
+                    ? '\n(Тасдиқланган отгулдаги ходимлар рўйхатдан чиқарилган)'
+                    : '\n(Tasdiqlangan javobda bo‘lganlar chiqarib tashlandi)';
+                return this.bot.telegram
+                  .sendMessage(sa.telegram_id, `${header}\n${body}${footer}`)
+                  .catch(() => void 0);
+              }),
+            );
+          }
+        } catch (e) {
+          this.logger.warn('Super admin morning summary failed: ' + e);
+        }
+      }
     } catch (e) {
       this.logger.warn('sendCheckInReminders failed');
     }
@@ -1864,27 +1907,60 @@ export class ScenarioFrontendService implements OnModuleInit {
   private async sendCheckOutReminders(): Promise<void> {
     try {
       const workers: UserEntity[] = await this.users.listVerifiedWorkers();
-      if (!workers.length) return;
-      const workerIds: number[] = workers.map((w) => w.id);
-      const todayMap = await this.attendance.getTodayForWorkers(workerIds);
+      const admins: UserEntity[] = await this.users.listActiveAdmins();
+      const all: UserEntity[] = [...workers, ...admins];
+      if (!all.length) return;
+      const ids: number[] = all.map((u) => u.id);
+      const todayMap = await this.attendance.getTodayForWorkers(ids);
+
+      const missingCheckout: UserEntity[] = [];
+
       await Promise.all(
-        workers.map(async (w: UserEntity) => {
-          if (this.reminderState.doneEvening.has(w.telegram_id)) return;
-          const rec: AttendanceEntity = todayMap.get(w.id);
-          // Send only if has check_in but no check_out yet
+        all.map(async (u: UserEntity) => {
+          if (this.reminderState.doneEvening.has(u.telegram_id)) return;
+            const rec: AttendanceEntity = todayMap.get(u.id);
+          // Need: has check_in but no check_out
           if (!rec?.check_in || rec.check_out) return;
-          const lang: Lang =
-            w.language === language.RU ? language.RU : language.UZ;
+          missingCheckout.push(u);
+          const lang: Lang = u.language === language.RU ? language.RU : language.UZ;
           const text =
             lang === language.RU
-              ? 'Пожалуйста, отметьте уход: Ушёл (Check-out) 🕘'
-              : 'Iltimos, ketganingizni tasdiqlang: Ketish (Check-out) 🕘';
+              ? '⏰ Напоминание: отметьте уход (Ушёл / Check-out) 🕘'
+              : '⏰ Eslatma: ketganingizni belgilang (Ketish / Check-out) 🕘';
           await this.bot.telegram
-            .sendMessage(w.telegram_id, text)
-            .then(() => this.reminderState.doneEvening.add(w.telegram_id))
+            .sendMessage(u.telegram_id, text)
+            .then(() => this.reminderState.doneEvening.add(u.telegram_id))
             .catch(() => void 0);
         }),
       );
+
+      // Send summary to super admins about those who didn't check out
+      if (missingCheckout.length) {
+        try {
+          const superAdmins = await this.users.listByRole(
+            UserRoleEnum.SUPER_ADMIN,
+          );
+          const uzList = missingCheckout
+            .map((m) => `• ${m.fullname}`)
+            .join('\n');
+          const ruList = uzList;
+          await Promise.all(
+            superAdmins.map((sa) => {
+              const lang: Lang = sa.language === language.RU ? language.RU : language.UZ;
+              const header =
+                lang === language.RU
+                  ? '📋 Вечерний отчёт (19:00) — не отметили уход:'
+                  : '📋 Kechki hisobot (19:00) — ketishni belgilanmagan:';
+              const body = lang === language.RU ? ruList : uzList;
+              return this.bot.telegram
+                .sendMessage(sa.telegram_id, `${header}\n${body}`)
+                .catch(() => void 0);
+            }),
+          );
+        } catch (e) {
+          this.logger.warn('Super admin evening summary failed: ' + e);
+        }
+      }
     } catch (e) {
       this.logger.warn('sendCheckOutReminders failed');
     }
@@ -1897,6 +1973,44 @@ export class ScenarioFrontendService implements OnModuleInit {
     reason: string,
   ): Promise<void> {
     try {
+      // Immediate super admin notification that someone submitted a request today (for daily tracking)
+      try {
+        const superAdminsImmediate = await this.users.listByRole(
+          UserRoleEnum.SUPER_ADMIN,
+        );
+        if (superAdminsImmediate.length) {
+          const isRuWorker = worker.language === language.RU;
+          let baseLine = isRuWorker
+            ? `🆕 ${worker.fullname} отправил(а) заявку`
+            : `🆕 ${worker.fullname} javob so'rovi yubordi`;
+          const typeLine =
+            request.request_type === RequestTypeEnum.HOURLY
+              ? isRuWorker
+                ? '⏰ Часовой'
+                : '⏰ Soatlik'
+              : isRuWorker
+                ? '🗓 Дневной'
+                : '🗓 Kunlik';
+          if (request.request_type === RequestTypeEnum.HOURLY && request.hourly_leave_time) {
+            baseLine += ` (${typeLine})`;
+          }
+          await Promise.all(
+            superAdminsImmediate.map((sa) => {
+              const lang: Lang = sa.language === language.RU ? language.RU : language.UZ;
+              const msg =
+                lang === language.RU
+                  ? `${worker.fullname} отправил(а) ${typeLine} запрос`
+                  : `${worker.fullname} ${typeLine} javob so'rovi yubordi`;
+              return this.bot.telegram
+                .sendMessage(sa.telegram_id, msg)
+                .catch(() => void 0);
+            }),
+          );
+        }
+      } catch (e) {
+        this.logger.warn('Immediate super admin notify failed: ' + e);
+      }
+
       // Barcha admin va super_admin rolidagi userlarni olish
       const adminManagers: UserEntity[] = await this.users.listByRole(
         UserRoleEnum.ADMIN,

@@ -143,6 +143,14 @@ export class UsersService {
     };
   }
 
+  // Active admins (manager style users) to include in attendance reminders
+  async listActiveAdmins(): Promise<UserEntity[]> {
+    return this.repo.find({
+      where: { role: UserRoleEnum.ADMIN, is_active: true },
+      order: { created_at: 'ASC' },
+    });
+  }
+
   async isSuperAdmin(telegramId: number): Promise<boolean> {
     const user = await this.findByTelegramId(telegramId);
     return !!user && user.role === UserRoleEnum.SUPER_ADMIN && user.is_active;
