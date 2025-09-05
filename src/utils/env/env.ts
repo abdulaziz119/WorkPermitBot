@@ -19,7 +19,7 @@ const SMTP_PASS = process.env.SMTP_PASS || '';
 
 // Optional reminder schedule (Uzbekistan time default)
 const REMINDER_CHECKIN_HH = parseInt(
-  process.env.REMINDER_CHECKIN_HH || '8',
+  process.env.REMINDER_CHECKIN_HH || '9',
   10,
 );
 const REMINDER_CHECKIN_MM = parseInt(
